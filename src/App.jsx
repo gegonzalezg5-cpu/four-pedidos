@@ -152,11 +152,12 @@ function Section({ title, count, accent, children, defaultOpen = true }) {
 }
 
 // ─── ORDER CARD ───────────────────────────────────────────────────────────────
-function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, isAdmin }) {
+function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDetail, isAdmin }) {
   const isFour = order.type === "four";
   const dl = isFour ? order.deadline : (order.stage === "produccion" ? order.deadlineProduccion : order.deadlineDiseno);
   const days = dl ? dLeft(dl) : null;
   const urgent = days !== null && days <= 2;
+  const totalFiles = (order.files?.length || 0) + (order.filesNota?.length || 0);
   return (
     <div style={{ ...S.orderCard, borderLeft: `3px solid ${urgent ? "#EF4444" : accentColor}` }}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -164,7 +165,7 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, isAdm
           <span style={{ fontWeight: 800, fontSize: 15, color: "#111827" }}>{order.cliente}</span>
           {isFour && order.express && <span style={S.chipExpress}>⚡ EXPRESS</span>}
           {!isFour && <span style={{ ...S.chip, background: order.stage === "diseno" ? "#EDE9FE" : "#F3E8FF", color: order.stage === "diseno" ? "#6D28D9" : "#7C3AED" }}>{order.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN"}</span>}
-          {order.files?.length > 0 && <span style={{ ...S.chip, background: "#EFF6FF", color: "#3B82F6" }}>📎 {order.files.length}</span>}
+          {totalFiles > 0 && <span style={{ ...S.chip, background: "#EFF6FF", color: "#3B82F6" }}>📎 {totalFiles}</span>}
         </div>
         <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexWrap: "wrap", marginBottom: 4 }}>
           <span>{order.vendedor}</span>
@@ -173,13 +174,15 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, isAdm
           <span>·</span><span style={{ fontWeight: 700, color: "#374151" }}>{fmtCurrency(order.valor)}</span>
           {order.notaVenta && <><span>·</span><span style={{ fontWeight: 700, color: "#9CA3AF" }}>NV #{order.notaVenta}</span></>}
         </div>
-        {order.notas && <div style={{ fontSize: 11, color: "#9CA3AF", fontStyle: "italic" }}>"{order.notas}"</div>}
         <div style={{ fontSize: 11, color: "#D1D5DB", marginTop: 3 }}>Ingresado: {fmtDate(order.createdAt)} {order.horaEnvio}</div>
       </div>
       {/* Right: deadline + actions */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0, marginLeft: 12 }}>
         {dl && <DeadlineBadge dl={dl} />}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {onDetail && (
+            <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={onDetail}>🔍 Detalle</button>
+          )}
           {isAdmin && onRevision && (
             <button style={{ ...S.actionBtn, background: "#F59E0B", color: "#fff" }} onClick={onRevision}>⚠ Revisión</button>
           )}
@@ -189,6 +192,114 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, isAdm
           {onDeliver && isAdmin && (
             <button style={{ ...S.actionBtn, background: "#059669", color: "#fff" }} onClick={onDeliver}>✓ Marcar listo</button>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ORDER DETAIL MODAL ────────────────────────────────────────────────────────
+function OrderDetailModal({ order, onClose }) {
+  if (!order) return null;
+  const isFour = order.type === "four";
+  const dl = isFour ? order.deadline : (order.stage === "produccion" ? order.deadlineProduccion : order.deadlineDiseno);
+
+  const FileList = ({ files, label, color = "#3B82F6", bg = "#EFF6FF" }) => {
+    if (!files || files.length === 0) return null;
+    return (
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "#6B7280", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>{label}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {files.map((f, i) => (
+            <div key={f.id || i} style={{ display: "flex", alignItems: "center", gap: 10, background: bg, border: `1px solid ${color}22`, borderRadius: 8, padding: "10px 14px" }}>
+              <span style={{ fontSize: 18 }}>{f.type?.includes("image") ? "🖼" : f.type?.includes("pdf") ? "📄" : "📎"}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</div>
+                <div style={{ fontSize: 11, color: "#9CA3AF" }}>{f.size > 1048576 ? `${(f.size/1048576).toFixed(1)} MB` : `${(f.size/1024).toFixed(0)} KB`}</div>
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 700, color, background: bg, padding: "2px 8px", borderRadius: 4, border: `1px solid ${color}44` }}>
+                {f.type?.includes("image") ? "IMAGEN" : f.type?.includes("pdf") ? "PDF" : f.name?.split('.').pop()?.toUpperCase() || "ARCHIVO"}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8, fontStyle: "italic" }}>
+          ⚠ Los archivos son referencias de nombre. Para descargarlos, el vendedor debe resubirlos o compartirlos directamente.
+        </div>
+      </div>
+    );
+  };
+
+  const Row = ({ label, value, bold }) => value ? (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "10px 0", borderBottom: "1px solid #F3F4F6" }}>
+      <span style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600, letterSpacing: "0.04em" }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: bold ? 800 : 600, color: "#111827", textAlign: "right", maxWidth: "60%" }}>{value}</span>
+    </div>
+  ) : null;
+
+  return (
+    <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...S.bigModal, maxWidth: 600 }}>
+        {/* Header */}
+        <div style={{ ...S.bigModalHeader, background: "#111827", borderRadius: "18px 18px 0 0" }}>
+          <div>
+            <div style={{ fontWeight: 900, fontSize: 15, color: "#F9FAFB", letterSpacing: "0.04em" }}>{order.cliente}</div>
+            <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>
+              {isFour ? "Pedido Four" : "Sublimado"} · NV #{order.notaVenta || "—"}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#6B7280", fontSize: 20, cursor: "pointer" }}>✕</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ ...S.bigModalBody, padding: "24px 28px" }}>
+
+          {/* Status badges */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
+            {isFour && order.express && <span style={{ ...S.chipExpress, fontSize: 12, padding: "4px 12px" }}>⚡ EXPRESS</span>}
+            {!isFour && <span style={{ ...S.chip, background: "#EDE9FE", color: "#6D28D9", fontSize: 12, padding: "4px 12px" }}>{order.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN"}</span>}
+            {order.revisionRazon && <span style={{ ...S.chip, background: "#FEF3C7", color: "#D97706", fontSize: 12, padding: "4px 12px" }}>⚠ EN REVISIÓN</span>}
+            {order.listoAt && <span style={{ ...S.chip, background: "#DCFCE7", color: "#15803D", fontSize: 12, padding: "4px 12px" }}>✓ LISTO</span>}
+          </div>
+
+          {/* Info rows */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#6B7280", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Información del pedido</div>
+            <Row label="Vendedor" value={order.vendedor} />
+            <Row label="Deporte" value={order.deporte} />
+            <Row label="Cantidad" value={`${order.cantidad} prendas`} />
+            <Row label="Valor" value={fmtCurrency(order.valor)} bold />
+            <Row label="N° Nota de Venta" value={order.notaVenta ? `#${order.notaVenta}` : null} bold />
+            <Row label="Tipo de entrega" value={isFour ? (order.express ? "⚡ Express (2 días hábiles)" : "📦 Normal (5 días hábiles)") : null} />
+            <Row label="Fecha ingreso" value={`${fmtDate(order.createdAt)} ${order.horaEnvio || ""}`} />
+            {dl && <Row label="Fecha entrega" value={fmtDate(dl)} bold />}
+            {order.approvedAt && <Row label="Diseño aprobado" value={fmtDate(order.approvedAt)} />}
+            {order.listoAt && <Row label="Marcado listo" value={fmtDate(order.listoAt)} />}
+            {order.deliveredAt && <Row label="Entregado" value={`${fmtDate(order.deliveredAt)} · por ${order.despachador}`} />}
+          </div>
+
+          {/* Revision */}
+          {order.revisionRazon && (
+            <div style={{ background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
+              <div style={{ fontSize: 10, fontWeight: 800, color: "#B45309", letterSpacing: "0.08em", marginBottom: 6 }}>MOTIVO DE REVISIÓN</div>
+              <div style={{ fontSize: 13, color: "#92400E", lineHeight: 1.6 }}>{order.revisionRazon}</div>
+              {order.revisionBy && <div style={{ fontSize: 11, color: "#D97706", marginTop: 6 }}>Por: {order.revisionBy} · {fmtDate(order.revisionAt)}</div>}
+            </div>
+          )}
+
+          {/* Files */}
+          <FileList files={order.files} label="📎 Archivos del pedido (logos, números)" color="#3B82F6" bg="#EFF6FF" />
+          <FileList files={order.filesNota} label="📄 Nota de venta" color="#F59E0B" bg="#FFFBEB" />
+
+          {(!order.files?.length && !order.filesNota?.length) && (
+            <div style={{ textAlign: "center", padding: "24px", color: "#D1D5DB", fontSize: 13, background: "#F9FAFB", borderRadius: 10 }}>
+              Sin archivos adjuntos en este pedido
+            </div>
+          )}
+        </div>
+
+        <div style={{ ...S.bigModalFooter }}>
+          <button style={S.btnGhost} onClick={onClose}>Cerrar</button>
         </div>
       </div>
     </div>
@@ -412,6 +523,7 @@ export default function App() {
   const [loading, setLoading]         = useState(true);
   const [showNew, setShowNew]         = useState(false);
   const [editOrder, setEditOrder]     = useState(null);
+  const [detailOrder, setDetailOrder] = useState(null);
   const [confirm, setConfirm]         = useState(null);
   const [pedidosOpen, setPedidosOpen] = useState(false);
   const [listoOpen, setListoOpen]     = useState(false);
@@ -685,12 +797,12 @@ export default function App() {
           ) : null;
         })()}
         {view === "dashboard"  && <Dashboard data={data} allPending={allPending} />}
-        {view === "todos"      && <TodosView orders={allPending} isAdmin={isAdmin} onDeliver={(id, t) => setConfirm({ type: t, id, action: "deliver" })} onApprove={id => setConfirm({ type: "sub", id, action: "approve" })} onRevision={(id, t) => setConfirm({ type: t, id, action: "revision" })} />}
-        {view === "four"       && <FourView  orders={data.four}  isAdmin={isAdmin} onDeliver={id => setConfirm({ type: "four", id, action: "deliver" })} onRevision={id => setConfirm({ type: "four", id, action: "revision" })} />}
-        {view === "sub"        && <SubView   orders={data.sub}   isAdmin={isAdmin} onApprove={id => setConfirm({ type: "sub", id, action: "approve" })} onDeliver={id => setConfirm({ type: "sub", id, action: "deliver" })} onRevision={id => setConfirm({ type: "sub", id, action: "revision" })} />}
-        {view === "revision"        && isAdmin && <RevisionView orders={data.revision || []} isAdmin={isAdmin} onRestore={restoreFromRevision} onMarkListo={id => setConfirm({ type: "rev", id, action: "deliver" })} onEdit={o => setEditOrder(o)} />}
-        {view === "listo_pendiente" && <ListoPendienteView orders={data.listo || []} onEntregado={id => setConfirm({ type: "listo", id, action: "despachar" })} />}
-        {view === "listo_entregado" && <ListoEntregadoView orders={data.delivered || []} />}
+        {view === "todos"      && <TodosView orders={allPending} isAdmin={isAdmin} onDeliver={(id, t) => setConfirm({ type: t, id, action: "deliver" })} onApprove={id => setConfirm({ type: "sub", id, action: "approve" })} onRevision={(id, t) => setConfirm({ type: t, id, action: "revision" })} onDetail={o => setDetailOrder(o)} />}
+        {view === "four"       && <FourView  orders={data.four}  isAdmin={isAdmin} onDeliver={id => setConfirm({ type: "four", id, action: "deliver" })} onRevision={id => setConfirm({ type: "four", id, action: "revision" })} onDetail={o => setDetailOrder(o)} />}
+        {view === "sub"        && <SubView   orders={data.sub}   isAdmin={isAdmin} onApprove={id => setConfirm({ type: "sub", id, action: "approve" })} onDeliver={id => setConfirm({ type: "sub", id, action: "deliver" })} onRevision={id => setConfirm({ type: "sub", id, action: "revision" })} onDetail={o => setDetailOrder(o)} />}
+        {view === "revision"        && isAdmin && <RevisionView orders={data.revision || []} isAdmin={isAdmin} onRestore={restoreFromRevision} onMarkListo={id => setConfirm({ type: "rev", id, action: "deliver" })} onEdit={o => setEditOrder(o)} onDetail={o => setDetailOrder(o)} />}
+        {view === "listo_pendiente" && <ListoPendienteView orders={data.listo || []} onEntregado={id => setConfirm({ type: "listo", id, action: "despachar" })} onDetail={o => setDetailOrder(o)} />}
+        {view === "listo_entregado" && <ListoEntregadoView orders={data.delivered || []} onDetail={o => setDetailOrder(o)} />}
         {view === "usuarios"        && isAdmin && <UsuariosView currentUser={user} />}
       </main>
 
@@ -756,6 +868,9 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ── ORDER DETAIL MODAL ── */}
+      {detailOrder && <OrderDetailModal order={detailOrder} onClose={() => setDetailOrder(null)} />}
     </div>
   );
 }
@@ -962,7 +1077,7 @@ function Dashboard({ data, allPending }) {
 }
 
 // ─── TODOS VIEW ───────────────────────────────────────────────────────────────
-function TodosView({ orders, isAdmin, onDeliver, onApprove, onRevision }) {
+function TodosView({ orders, isAdmin, onDeliver, onApprove, onRevision, onDetail }) {
   const [fv, setFv] = useState("Todos");
   const fourOrders = orders.filter(o => o.type === "four" && (fv === "Todos" || o.vendedor === fv)).sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
   const subOrders  = orders.filter(o => o.type === "sub"  && (fv === "Todos" || o.vendedor === fv)).sort((a, b) => {
@@ -982,12 +1097,14 @@ function TodosView({ orders, isAdmin, onDeliver, onApprove, onRevision }) {
       <Section title="Pedidos Four" count={fourOrders.length} accent="#3B82F6">
         {fourOrders.length === 0 ? <div style={S.emptyCard}>Sin Pedidos Four activos</div>
           : fourOrders.map(o => <OrderCard key={o.id} order={o} accentColor="#3B82F6" isAdmin={isAdmin}
+              onDetail={() => onDetail(o)}
               onDeliver={() => onDeliver(o.id, "four")}
               onRevision={isAdmin ? () => onRevision(o.id, "four") : null} />)}
       </Section>
       <Section title="Pedidos Sublimados" count={subOrders.length} accent="#7C3AED">
         {subOrders.length === 0 ? <div style={S.emptyCard}>Sin Pedidos Sublimados activos</div>
           : subOrders.map(o => <OrderCard key={o.id} order={o} accentColor="#7C3AED" isAdmin={isAdmin}
+              onDetail={() => onDetail(o)}
               onDeliver={() => onDeliver(o.id, "sub")}
               onApprove={o.stage === "diseno" ? () => onApprove(o.id) : null}
               onRevision={isAdmin ? () => onRevision(o.id, "sub") : null} />)}
@@ -997,7 +1114,7 @@ function TodosView({ orders, isAdmin, onDeliver, onApprove, onRevision }) {
 }
 
 // ─── FOUR VIEW ────────────────────────────────────────────────────────────────
-function FourView({ orders, isAdmin, onDeliver, onRevision }) {
+function FourView({ orders, isAdmin, onDeliver, onRevision, onDetail }) {
   const [fv, setFv] = useState("Todos");
   const filtered = orders.filter(o => fv === "Todos" || o.vendedor === fv).sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
   return (
@@ -1010,6 +1127,7 @@ function FourView({ orders, isAdmin, onDeliver, onRevision }) {
       </div>
       {filtered.length === 0 ? <div style={S.emptyCard}>Sin Pedidos Four activos</div>
         : filtered.map(o => <OrderCard key={o.id} order={o} accentColor="#3B82F6" isAdmin={isAdmin}
+            onDetail={() => onDetail(o)}
             onDeliver={() => onDeliver(o.id)}
             onRevision={isAdmin ? () => onRevision(o.id) : null} />)}
     </div>
@@ -1017,7 +1135,7 @@ function FourView({ orders, isAdmin, onDeliver, onRevision }) {
 }
 
 // ─── SUB VIEW ─────────────────────────────────────────────────────────────────
-function SubView({ orders, isAdmin, onApprove, onDeliver, onRevision }) {
+function SubView({ orders, isAdmin, onApprove, onDeliver, onRevision, onDetail }) {
   const [fv, setFv] = useState("Todos");
   const filtered = orders.filter(o => fv === "Todos" || o.vendedor === fv);
   const enD = filtered.filter(o => o.stage === "diseno").sort((a, b) => new Date(a.deadlineDiseno) - new Date(b.deadlineDiseno));
@@ -1033,12 +1151,14 @@ function SubView({ orders, isAdmin, onApprove, onDeliver, onRevision }) {
       <Section title="En Diseño" count={enD.length} accent="#8B5CF6">
         {enD.length === 0 ? <div style={S.emptyCard}>Sin pedidos en diseño</div>
           : enD.map(o => <OrderCard key={o.id} order={o} accentColor="#8B5CF6" isAdmin={isAdmin}
+              onDetail={() => onDetail(o)}
               onApprove={() => onApprove(o.id)} onDeliver={() => onDeliver(o.id)}
               onRevision={isAdmin ? () => onRevision(o.id) : null} />)}
       </Section>
       <Section title="En Producción" count={enP.length} accent="#6D28D9">
         {enP.length === 0 ? <div style={S.emptyCard}>Sin pedidos en producción</div>
           : enP.map(o => <OrderCard key={o.id} order={o} accentColor="#6D28D9" isAdmin={isAdmin}
+              onDetail={() => onDetail(o)}
               onDeliver={() => onDeliver(o.id)}
               onRevision={isAdmin ? () => onRevision(o.id) : null} />)}
       </Section>
@@ -1047,7 +1167,7 @@ function SubView({ orders, isAdmin, onApprove, onDeliver, onRevision }) {
 }
 
 // ─── REVISION VIEW ────────────────────────────────────────────────────────────
-function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit }) {
+function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetail }) {
   return (
     <div>
       <h2 style={S.pageTitle}>Falta Revisión</h2>
@@ -1079,6 +1199,7 @@ function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit }) {
             </div>
             {isAdmin && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0, marginLeft: 12 }}>
+                <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
                 <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onEdit(o)}>✏ Editar</button>
                 <button style={{ ...S.actionBtn, background: "#3B82F6", color: "#fff" }} onClick={() => onRestore(o.id)}>↩ Restaurar</button>
                 <button style={{ ...S.actionBtn, background: "#059669", color: "#fff" }} onClick={() => onMarkListo(o.id)}>✓ Marcar listo</button>
@@ -1092,7 +1213,7 @@ function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit }) {
 }
 
 // ─── LISTO: PENDIENTE DE ENTREGA ─────────────────────────────────────────────
-function ListoPendienteView({ orders, onEntregado }) {
+function ListoPendienteView({ orders, onEntregado, onDetail }) {
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
@@ -1120,7 +1241,6 @@ function ListoPendienteView({ orders, onEntregado }) {
                 <span>{o.cantidad} prendas</span><span>·</span>
                 <span style={{ fontWeight: 700, color: "#374151" }}>{fmtCurrency(o.valor)}</span>
               </div>
-              {o.notas && <div style={{ fontSize: 11, color: "#9CA3AF", fontStyle: "italic" }}>"{o.notas}"</div>}
               <div style={{ fontSize: 11, color: "#059669", fontWeight: 600, marginTop: 4 }}>
                 Listo desde: {fmtDate(o.listoAt)}
               </div>
@@ -1130,11 +1250,8 @@ function ListoPendienteView({ orders, onEntregado }) {
                 <div style={{ fontSize: 16, fontWeight: 900, color: "#059669" }}>{fmtCurrency(o.valor)}</div>
                 <div style={{ fontSize: 10, color: "#9CA3AF", letterSpacing: "0.06em" }}>VALOR PEDIDO</div>
               </div>
-              <button
-                style={{ ...S.actionBtn, background: "#059669", color: "#fff", padding: "9px 16px", fontSize: 11 }}
-                onClick={() => onEntregado(o.id)}>
-                📦 Marcar entregado
-              </button>
+              <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
+              <button style={{ ...S.actionBtn, background: "#059669", color: "#fff", padding: "9px 16px", fontSize: 11 }} onClick={() => onEntregado(o.id)}>📦 Marcar entregado</button>
             </div>
           </div>
         ))
@@ -1144,7 +1261,7 @@ function ListoPendienteView({ orders, onEntregado }) {
 }
 
 // ─── LISTO: ENTREGADO ─────────────────────────────────────────────────────────
-function ListoEntregadoView({ orders }) {
+function ListoEntregadoView({ orders, onDetail }) {
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
@@ -1171,7 +1288,6 @@ function ListoEntregadoView({ orders }) {
                 <span>{o.cantidad} prendas</span><span>·</span>
                 <span style={{ fontWeight: 700, color: "#374151" }}>{fmtCurrency(o.valor)}</span>
               </div>
-              {o.notas && <div style={{ fontSize: 11, color: "#9CA3AF", fontStyle: "italic" }}>"{o.notas}"</div>}
               <div style={{ display: "flex", gap: 16, marginTop: 5, flexWrap: "wrap" }}>
                 <div style={{ fontSize: 11, color: "#9CA3AF" }}>
                   Ingresado: <span style={{ color: "#6B7280", fontWeight: 600 }}>{fmtDate(o.createdAt)}</span>
@@ -1189,9 +1305,12 @@ function ListoEntregadoView({ orders }) {
                 )}
               </div>
             </div>
-            <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
-              <div style={{ fontSize: 16, fontWeight: 900, color: "#111827" }}>{fmtCurrency(o.valor)}</div>
-              <div style={{ fontSize: 10, color: "#9CA3AF", letterSpacing: "0.06em", marginTop: 2 }}>VALOR PEDIDO</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end", flexShrink: 0, marginLeft: 12 }}>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 16, fontWeight: 900, color: "#111827" }}>{fmtCurrency(o.valor)}</div>
+                <div style={{ fontSize: 10, color: "#9CA3AF", letterSpacing: "0.06em", marginTop: 2 }}>VALOR PEDIDO</div>
+              </div>
+              <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
             </div>
           </div>
         ))
