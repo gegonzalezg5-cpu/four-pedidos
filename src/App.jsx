@@ -15,12 +15,12 @@ const SEED_USERS = [
 ];
 
 // ─── AUTH HELPERS ─────────────────────────────────────────────────────────────
-async function loadUsers() {
-  try { const r = await window.storage.get(USERS_KEY); if (r?.value) return JSON.parse(r.value); } catch {}
+function loadUsers() {
+  try { const r = localStorage.getItem(USERS_KEY); if (r) return JSON.parse(r); } catch {}
   return SEED_USERS;
 }
-async function saveUsers(users) {
-  try { await window.storage.set(USERS_KEY, JSON.stringify(users)); } catch {}
+function saveUsers(users) {
+  try { localStorage.setItem(USERS_KEY, JSON.stringify(users)); } catch {}
 }
 
 // ─── DATE HELPERS ─────────────────────────────────────────────────────────────
@@ -58,11 +58,11 @@ function inPeriod(dateStr, period, from, to) {
 }
 
 // ─── STORAGE ──────────────────────────────────────────────────────────────────
-async function loadData() {
-  try { const r = await window.storage.get(STORAGE_KEY); if (r?.value) return JSON.parse(r.value); } catch {}
+function loadData() {
+  try { const r = localStorage.getItem(STORAGE_KEY); if (r) return JSON.parse(r); } catch {}
   return { four: [], sub: [], delivered: [], revision: [], listo: [] };
 }
-async function saveData(d) { try { await window.storage.set(STORAGE_KEY, JSON.stringify(d)); } catch {} }
+function saveData(d) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {} }
 
 // ─── DEADLINE BADGE ───────────────────────────────────────────────────────────
 function DeadlineBadge({ dl }) {
@@ -224,15 +224,13 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
   const subPrev  = tipo === "sub"  && form.fechaEnvio ? calcDeadlineSubDiseno(form.fechaEnvio, form.horaEnvio) : null;
   const canSubmit = tipo && form.cliente && form.notaVenta && form.cantidad && form.valor;
 
-  const submit = async () => {
+  const submit = () => {
     if (!canSubmit) return;
-    setSaving(true);
     if (isEdit) {
-      await onEditRevision(editOrder.id, { ...form, type: tipo, cantidad: +form.cantidad, valor: +form.valor });
+      onEditRevision(editOrder.id, { ...form, type: tipo, cantidad: +form.cantidad, valor: +form.valor });
     } else {
-      tipo === "four" ? await onAddFour(form) : await onAddSub(form);
+      tipo === "four" ? onAddFour(form) : onAddSub(form);
     }
-    setSaving(false);
     onClose();
   };
 
@@ -345,9 +343,9 @@ function LoginScreen({ onLogin }) {
   const [error, setError]     = useState("");
   const [loading, setLoading] = useState(false);
 
-  const submit = async () => {
+  const submit = () => {
     setError(""); setLoading(true);
-    const users = await loadUsers();
+    const users = loadUsers();
     const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
     if (user) { onLogin(user); }
     else { setError("Correo o contraseña incorrectos."); }
@@ -421,13 +419,15 @@ export default function App() {
   const listoRef                      = useRef(null);
 
   useEffect(() => {
-    // Try to restore session
     try {
       const saved = sessionStorage.getItem("fs_user");
       if (saved) setUser(JSON.parse(saved));
     } catch {}
-    loadData().then(d => { setData(d); setLoading(false); });
-    const iv = setInterval(() => loadData().then(setData), 15000);
+    const d = loadData();
+    setData(d);
+    setLoading(false);
+    // Poll every 15s to sync if multiple tabs open
+    const iv = setInterval(() => { const fresh = loadData(); setData(fresh); }, 15000);
     return () => clearInterval(iv);
   }, []);
 
@@ -452,23 +452,23 @@ export default function App() {
     try { sessionStorage.removeItem("fs_user"); } catch {}
   };
 
-  const persist = useCallback(async nd => { setData(nd); await saveData(nd); }, []);
+  const persist = useCallback(nd => { setData(nd); saveData(nd); }, []);
   const isAdmin = user?.role === "admin";
 
-  const addFour = async f => {
+  const addFour = f => {
     const dl = calcDeadlineFour(f.fechaEnvio, f.horaEnvio, f.express);
-    await persist({ ...data, four: [{ id: Date.now() + "", type: "four", ...f, cantidad: +f.cantidad, valor: +f.valor, deadline: dl.toISOString(), createdAt: new Date().toISOString() }, ...data.four] });
+    persist({ ...data, four: [{ id: Date.now() + "", type: "four", ...f, cantidad: +f.cantidad, valor: +f.valor, deadline: dl.toISOString(), createdAt: new Date().toISOString() }, ...data.four] });
   };
-  const addSub = async f => {
+  const addSub = f => {
     const dd = calcDeadlineSubDiseno(f.fechaEnvio, f.horaEnvio);
-    await persist({ ...data, sub: [{ id: Date.now() + "", type: "sub", ...f, cantidad: +f.cantidad, valor: +f.valor, deadlineDiseno: dd.toISOString(), deadlineProduccion: null, approvedAt: null, stage: "diseno", createdAt: new Date().toISOString() }, ...data.sub] });
+    persist({ ...data, sub: [{ id: Date.now() + "", type: "sub", ...f, cantidad: +f.cantidad, valor: +f.valor, deadlineDiseno: dd.toISOString(), deadlineProduccion: null, approvedAt: null, stage: "diseno", createdAt: new Date().toISOString() }, ...data.sub] });
   };
-  const approveSubDesign = async id => {
+  const approveSubDesign = id => {
     const now = new Date().toISOString();
-    await persist({ ...data, sub: data.sub.map(o => o.id === id ? { ...o, stage: "produccion", approvedAt: now, deadlineProduccion: calcDeadlineSubProduccion(now).toISOString() } : o) });
+    persist({ ...data, sub: data.sub.map(o => o.id === id ? { ...o, stage: "produccion", approvedAt: now, deadlineProduccion: calcDeadlineSubProduccion(now).toISOString() } : o) });
     setConfirm(null);
   };
-  const markDelivered = async (id, type) => {
+  const markDelivered = (id, type) => {
     const list = type === "four" ? data.four : type === "sub" ? data.sub : (data.revision || []);
     const order = list.find(o => o.id === id);
     if (!order) return;
@@ -479,24 +479,24 @@ export default function App() {
       revision: (data.revision || []).filter(o => o.id !== id),
       listo: [{ ...order, listoAt: new Date().toISOString() }, ...(data.listo || [])],
     };
-    await persist(newData);
+    persist(newData);
     setConfirm(null);
   };
-  const despachar = async (id) => {
+  const despachar = (id) => {
     const order = (data.listo || []).find(o => o.id === id);
     if (!order) return;
-    await persist({
+    persist({
       ...data,
       listo: (data.listo || []).filter(o => o.id !== id),
       delivered: [{ ...order, deliveredAt: new Date().toISOString(), despachador: user.name },...(data.delivered || [])],
     });
     setConfirm(null);
   };
-  const sendToRevision = async (id, type, razon = "") => {
+  const sendToRevision = (id, type, razon = "") => {
     const list = type === "four" ? data.four : data.sub;
     const order = list.find(o => o.id === id);
     if (!order) return;
-    await persist({
+    persist({
       ...data,
       four: data.four.filter(o => o.id !== id),
       sub:  data.sub.filter(o => o.id !== id),
@@ -504,31 +504,29 @@ export default function App() {
     });
     setConfirm(null);
   };
-  const restoreFromRevision = async id => {
+  const restoreFromRevision = id => {
     const order = data.revision.find(o => o.id === id);
     if (!order) return;
     const newData = { ...data, revision: data.revision.filter(o => o.id !== id) };
     if (order.type === "four") newData.four = [order, ...data.four];
     else newData.sub = [order, ...data.sub];
-    await persist(newData);
+    persist(newData);
   };
-  const editRevisionOrder = async (id, updated) => {
-    // Recalculate deadlines with updated data
+  const editRevisionOrder = (id, updated) => {
     let patches = { ...updated };
     if (updated.type === "four") {
       patches.deadline = calcDeadlineFour(updated.fechaEnvio, updated.horaEnvio, updated.express).toISOString();
     } else {
       patches.deadlineDiseno = calcDeadlineSubDiseno(updated.fechaEnvio, updated.horaEnvio).toISOString();
     }
-    await persist({
+    persist({
       ...data,
       revision: data.revision.map(o => o.id === id ? { ...o, ...patches } : o),
     });
   };
-  const deleteDel = async id => persist({ ...data, delivered: data.delivered.filter(d => d.id !== id) });
+  const deleteDel = id => persist({ ...data, delivered: data.delivered.filter(d => d.id !== id) });
 
-  const editRevision = async (id, updatedFields) => {
-    // Recalculate deadline based on updated form
+  const editRevision = (id, updatedFields) => {
     let updated;
     if (updatedFields.type === "four") {
       const dl = calcDeadlineFour(updatedFields.fechaEnvio, updatedFields.horaEnvio, updatedFields.express);
@@ -537,7 +535,7 @@ export default function App() {
       const dd = calcDeadlineSubDiseno(updatedFields.fechaEnvio, updatedFields.horaEnvio);
       updated = { ...updatedFields, deadlineDiseno: dd.toISOString() };
     }
-    await persist({
+    persist({
       ...data,
       revision: (data.revision || []).map(o => o.id === id ? { ...o, ...updated, editedAt: new Date().toISOString() } : o),
     });
@@ -1213,7 +1211,7 @@ function UsuariosView({ currentUser }) {
   const [saved, setSaved]       = useState(false);
 
   useEffect(() => {
-    loadUsers().then(u => { setUsers(u); setLoading(false); });
+    const u = loadUsers(); setUsers(u); setLoading(false);
   }, []);
 
   const openNew = () => {
@@ -1225,7 +1223,7 @@ function UsuariosView({ currentUser }) {
     setFormError(""); setEditUser(u); setShowForm(true);
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     setFormError("");
     if (!form.name.trim() || !form.email.trim() || !form.password.trim()) {
       setFormError("Todos los campos son obligatorios."); return;
@@ -1235,26 +1233,24 @@ function UsuariosView({ currentUser }) {
 
     let updated;
     if (editUser) {
-      // Edit existing
       updated = users.map(u => u.email === editUser.email ? { ...u, ...form } : u);
     } else {
-      // New user — check duplicate email
       if (users.find(u => u.email.toLowerCase() === form.email.toLowerCase())) {
         setFormError("Ya existe un usuario con ese correo."); return;
       }
       updated = [...users, { ...form, email: form.email.toLowerCase() }];
     }
-    await saveUsers(updated);
+    saveUsers(updated);
     setUsers(updated);
     setShowForm(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
 
-  const handleDelete = async (email) => {
-    if (email === currentUser.email) return; // can't delete yourself
+  const handleDelete = (email) => {
+    if (email === currentUser.email) return;
     const updated = users.filter(u => u.email !== email);
-    await saveUsers(updated);
+    saveUsers(updated);
     setUsers(updated);
   };
 
@@ -1362,10 +1358,10 @@ function UsuariosView({ currentUser }) {
 const S = {
   app:  { minHeight: "100vh", background: "#F9FAFB", fontFamily: "Montserrat, sans-serif", color: "#111827" },
   header: { background: "#111827", borderBottom: "1px solid #1F2937", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 12px rgba(0,0,0,0.22)" },
-  headerInner: { maxWidth: "100%", margin: "0 auto", padding: "0 32px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 68, gap: 20 },
+  headerInner: { width: "100%", padding: "0 40px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 68, gap: 20, boxSizing: "border-box" },
   navBtn: { padding: "8px 16px", background: "transparent", color: "#6B7280", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", whiteSpace: "nowrap", fontFamily: "Montserrat, sans-serif" },
   navBtnActive: { color: "#F9FAFB", background: "#1F2937" },
-  main: { maxWidth: "100%", margin: "0 auto", padding: "32px 40px 90px" },
+  main: { width: "100%", padding: "32px 40px 90px", boxSizing: "border-box" },
   pageTitle: { fontSize: 24, fontWeight: 900, color: "#111827", letterSpacing: "-0.01em", margin: "0 0 20px" },
   card: { background: "#fff", borderRadius: 14, padding: 24, border: "1px solid #E5E7EB" },
   cardTitle: { fontSize: 11, color: "#9CA3AF", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 16 },
