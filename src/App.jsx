@@ -355,25 +355,51 @@ function LoginScreen({ onLogin }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F9FAFB", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Montserrat, sans-serif", padding: 24 }}>
-      <div style={{ background: "#fff", borderRadius: 16, padding: "40px 36px", width: "100%", maxWidth: 400, boxShadow: "0 4px 32px rgba(0,0,0,0.08)", border: "1px solid #E5E7EB" }}>
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ display: "inline-block", marginBottom: 12 }}>
-            <img src={LOGO_IMG} alt="Four Sport" style={{ height: 52, display: "block" }} />
+    <div style={{ minHeight: "100vh", background: "#111827", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Montserrat, sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: 480, padding: "0 24px" }}>
+        {/* Logo */}
+        <div style={{ textAlign: "center", marginBottom: 40 }}>
+          <div style={{ display: "inline-block", background: "#fff", borderRadius: 14, padding: "16px 32px", marginBottom: 20 }}>
+            <img src={LOGO_IMG} alt="Four Sport" style={{ height: 56, display: "block" }} />
           </div>
-          <div style={{ fontSize: 11, color: "#9CA3AF", letterSpacing: "0.15em", fontWeight: 700 }}>ORDER MANAGEMENT</div>
+          <div style={{ fontSize: 13, color: "#4B5563", letterSpacing: "0.2em", fontWeight: 700 }}>ORDER MANAGEMENT</div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <Field label="Correo electrónico">
-            <input style={S.input} type="email" value={email} placeholder="tu@foursport.cl" onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} />
-          </Field>
-          <Field label="Contraseña">
-            <input style={S.input} type="password" value={password} placeholder="••••••••" onChange={e => setPass(e.target.value)} onKeyDown={e => e.key === "Enter" && submit()} />
-          </Field>
-          {error && <div style={{ background: "#FEF2F2", color: "#DC2626", fontSize: 12, padding: "8px 12px", borderRadius: 8, fontWeight: 600 }}>{error}</div>}
-          <button style={{ ...S.btnPrimary, marginTop: 8 }} onClick={submit} disabled={loading}>
-            {loading ? "Ingresando…" : "INGRESAR →"}
-          </button>
+
+        {/* Card */}
+        <div style={{ background: "#fff", borderRadius: 20, padding: "44px 40px", boxShadow: "0 24px 64px rgba(0,0,0,0.4)" }}>
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ fontSize: 26, fontWeight: 900, color: "#111827", marginBottom: 6 }}>Bienvenido</div>
+            <div style={{ fontSize: 14, color: "#9CA3AF", fontWeight: 500 }}>Ingresa tus credenciales para continuar</div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Correo electrónico</div>
+              <input
+                style={{ ...S.input, fontSize: 15, padding: "13px 16px" }}
+                type="email" value={email} placeholder="tu@foursport.cl"
+                onChange={e => setEmail(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && submit()} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Contraseña</div>
+              <input
+                style={{ ...S.input, fontSize: 15, padding: "13px 16px" }}
+                type="password" value={password} placeholder="••••••••"
+                onChange={e => setPass(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && submit()} />
+            </div>
+            {error && (
+              <div style={{ background: "#FEF2F2", color: "#DC2626", fontSize: 13, padding: "10px 14px", borderRadius: 8, fontWeight: 600, border: "1px solid #FECACA" }}>
+                {error}
+              </div>
+            )}
+            <button
+              style={{ ...S.btnPrimary, marginTop: 8, width: "100%", padding: "14px", fontSize: 14, letterSpacing: "0.1em", borderRadius: 10 }}
+              onClick={submit} disabled={loading}>
+              {loading ? "Ingresando…" : "INGRESAR →"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1297,11 +1323,12 @@ function UsuariosView({ currentUser }) {
                 </div>
                 <div style={{ gridColumn: "1 / -1" }}>
                   <label style={S.label}>Correo electrónico *</label>
-                  <input style={{ ...S.input, marginTop: 5 }} type="email" value={form.email}
+                  <input
+                    style={{ ...S.input, marginTop: 5, background: editUser ? "#F9FAFB" : "#fff", color: editUser ? "#9CA3AF" : "#111827" }}
+                    type="email" value={form.email}
                     placeholder="correo@foursport.cl"
                     readOnly={!!editUser}
-                    onChange={e => !editUser && setForm({ ...form, email: e.target.value })}
-                    style={{ ...S.input, marginTop: 5, background: editUser ? "#F9FAFB" : "#fff", color: editUser ? "#9CA3AF" : "#111827" }} />
+                    onChange={e => !editUser && setForm({ ...form, email: e.target.value })} />
                   {editUser && <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 4 }}>El correo no se puede cambiar.</div>}
                 </div>
                 <div>
@@ -1334,52 +1361,52 @@ function UsuariosView({ currentUser }) {
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const S = {
   app:  { minHeight: "100vh", background: "#F9FAFB", fontFamily: "Montserrat, sans-serif", color: "#111827" },
-  header: { background: "#111827", borderBottom: "1px solid #1F2937", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 8px rgba(0,0,0,0.18)" },
-  headerInner: { maxWidth: 1320, margin: "0 auto", padding: "0 20px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 56, gap: 16 },
-  navBtn: { padding: "6px 12px", background: "transparent", color: "#6B7280", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", whiteSpace: "nowrap" },
+  header: { background: "#111827", borderBottom: "1px solid #1F2937", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 12px rgba(0,0,0,0.22)" },
+  headerInner: { maxWidth: "100%", margin: "0 auto", padding: "0 32px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 68, gap: 20 },
+  navBtn: { padding: "8px 16px", background: "transparent", color: "#6B7280", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", whiteSpace: "nowrap", fontFamily: "Montserrat, sans-serif" },
   navBtnActive: { color: "#F9FAFB", background: "#1F2937" },
-  main: { maxWidth: 1320, margin: "0 auto", padding: "28px 20px 90px" },
-  pageTitle: { fontSize: 20, fontWeight: 900, color: "#111827", letterSpacing: "-0.01em", margin: "0 0 18px" },
-  card: { background: "#fff", borderRadius: 12, padding: 20, border: "1px solid #E5E7EB" },
-  cardTitle: { fontSize: 10, color: "#9CA3AF", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 14 },
-  statCard: { background: "#fff", borderRadius: 12, padding: "18px 20px", border: "1px solid #E5E7EB" },
-  statsGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 20 },
-  statValue: { fontSize: 26, fontWeight: 900, lineHeight: 1 },
-  statLabel: { fontSize: 10, color: "#9CA3AF", marginTop: 6, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" },
-  emptyText: { color: "#D1D5DB", fontSize: 13, textAlign: "center", padding: "14px 0" },
-  emptyCard: { background: "#fff", borderRadius: 10, padding: "32px", textAlign: "center", color: "#D1D5DB", fontSize: 13, border: "1px solid #E5E7EB", marginBottom: 8 },
-  orderCard: { background: "#fff", border: "1px solid #E5E7EB", borderRadius: 10, padding: "14px 16px", marginBottom: 6, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" },
-  chip: { fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 5, letterSpacing: "0.04em", whiteSpace: "nowrap" },
-  chipExpress: { fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 5, background: "#FEF3C7", color: "#D97706", letterSpacing: "0.04em" },
-  sectionToggle: { width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fff", border: "1px solid #E5E7EB", borderRadius: 10, padding: "12px 16px", cursor: "pointer", marginBottom: 6 },
-  periodBtn: { padding: "5px 12px", background: "#fff", border: "1px solid #E5E7EB", borderRadius: 6, cursor: "pointer", fontSize: 10, color: "#9CA3AF", fontWeight: 700, letterSpacing: "0.06em" },
+  main: { maxWidth: "100%", margin: "0 auto", padding: "32px 40px 90px" },
+  pageTitle: { fontSize: 24, fontWeight: 900, color: "#111827", letterSpacing: "-0.01em", margin: "0 0 20px" },
+  card: { background: "#fff", borderRadius: 14, padding: 24, border: "1px solid #E5E7EB" },
+  cardTitle: { fontSize: 11, color: "#9CA3AF", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 16 },
+  statCard: { background: "#fff", borderRadius: 14, padding: "20px 24px", border: "1px solid #E5E7EB" },
+  statsGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 20 },
+  statValue: { fontSize: 30, fontWeight: 900, lineHeight: 1 },
+  statLabel: { fontSize: 11, color: "#9CA3AF", marginTop: 6, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" },
+  emptyText: { color: "#D1D5DB", fontSize: 14, textAlign: "center", padding: "16px 0" },
+  emptyCard: { background: "#fff", borderRadius: 12, padding: "40px", textAlign: "center", color: "#D1D5DB", fontSize: 14, border: "1px solid #E5E7EB", marginBottom: 8 },
+  orderCard: { background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: "16px 20px", marginBottom: 8, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" },
+  chip: { fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 5, letterSpacing: "0.04em", whiteSpace: "nowrap" },
+  chipExpress: { fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 5, background: "#FEF3C7", color: "#D97706", letterSpacing: "0.04em" },
+  sectionToggle: { width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fff", border: "1px solid #E5E7EB", borderRadius: 10, padding: "14px 18px", cursor: "pointer", marginBottom: 8 },
+  periodBtn: { padding: "6px 14px", background: "#fff", border: "1px solid #E5E7EB", borderRadius: 6, cursor: "pointer", fontSize: 11, color: "#9CA3AF", fontWeight: 700, letterSpacing: "0.06em", fontFamily: "Montserrat, sans-serif" },
   periodBtnActive: { background: "#111827", color: "#fff", border: "1px solid #111827" },
   formGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 },
-  label: { fontSize: 10, fontWeight: 700, color: "#6B7280", letterSpacing: "0.1em", textTransform: "uppercase" },
-  input: { padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 13, color: "#111827", outline: "none", width: "100%", boxSizing: "border-box", fontFamily: "Montserrat, sans-serif", background: "#fff" },
-  toggleBtn: { flex: 1, padding: "9px", background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 12, color: "#9CA3AF", fontFamily: "Montserrat, sans-serif" },
+  label: { fontSize: 11, fontWeight: 700, color: "#6B7280", letterSpacing: "0.1em", textTransform: "uppercase" },
+  input: { padding: "11px 14px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 14, color: "#111827", outline: "none", width: "100%", boxSizing: "border-box", fontFamily: "Montserrat, sans-serif", background: "#fff" },
+  toggleBtn: { flex: 1, padding: "10px", background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 13, color: "#9CA3AF", fontFamily: "Montserrat, sans-serif" },
   toggleActive: { borderColor: "#3B82F6", color: "#3B82F6", background: "#EFF6FF" },
   toggleExpress: { borderColor: "#F59E0B", color: "#D97706", background: "#FFFBEB" },
-  previewBox: { border: "1px solid #E5E7EB", borderRadius: 10, padding: "12px 16px", display: "flex", flexDirection: "column", gap: 3, marginTop: 4, marginBottom: 14, background: "#F9FAFB" },
-  uploadBlock: { border: "1px solid #E5E7EB", borderRadius: 10, padding: 12, marginBottom: 14, background: "#F9FAFB" },
-  uploadTitle: { fontSize: 10, fontWeight: 700, color: "#6B7280", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 },
-  uploadDrop: { border: "1px dashed #D1D5DB", borderRadius: 8, padding: "14px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", textAlign: "center" },
-  fileRow: { display: "flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 6, padding: "5px 10px", marginTop: 4 },
-  tipoBtn: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: "16px 12px", background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 10, cursor: "pointer" },
+  previewBox: { border: "1px solid #E5E7EB", borderRadius: 10, padding: "14px 18px", display: "flex", flexDirection: "column", gap: 3, marginTop: 4, marginBottom: 14, background: "#F9FAFB" },
+  uploadBlock: { border: "1px solid #E5E7EB", borderRadius: 10, padding: 14, marginBottom: 14, background: "#F9FAFB" },
+  uploadTitle: { fontSize: 11, fontWeight: 700, color: "#6B7280", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 },
+  uploadDrop: { border: "1px dashed #D1D5DB", borderRadius: 8, padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, cursor: "pointer", textAlign: "center" },
+  fileRow: { display: "flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 6, padding: "6px 12px", marginTop: 4 },
+  tipoBtn: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5, padding: "18px 14px", background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 10, cursor: "pointer" },
   tipoBtnActive: { borderColor: "#3B82F6", background: "#EFF6FF" },
-  overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, padding: 16 },
-  bigModal: { background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16, width: "100%", maxWidth: 680, maxHeight: "92vh", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.12)" },
-  bigModalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid #F3F4F6", flexShrink: 0 },
-  bigModalBody: { flex: 1, overflowY: "auto", padding: "20px" },
-  bigModalFooter: { display: "flex", justifyContent: "flex-end", gap: 10, padding: "14px 20px", borderTop: "1px solid #F3F4F6", flexShrink: 0 },
-  confirmModal: { background: "#fff", border: "1px solid #E5E7EB", borderRadius: 14, padding: 28, maxWidth: 400, width: "100%", boxShadow: "0 8px 40px rgba(0,0,0,0.12)" },
-  confirmTitle: { fontSize: 17, fontWeight: 900, color: "#111827", marginBottom: 8 },
+  overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, padding: 20 },
+  bigModal: { background: "#fff", border: "1px solid #E5E7EB", borderRadius: 18, width: "100%", maxWidth: 720, maxHeight: "92vh", display: "flex", flexDirection: "column", boxShadow: "0 12px 48px rgba(0,0,0,0.15)" },
+  bigModalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 24px", borderBottom: "1px solid #F3F4F6", flexShrink: 0 },
+  bigModalBody: { flex: 1, overflowY: "auto", padding: "24px" },
+  bigModalFooter: { display: "flex", justifyContent: "flex-end", gap: 10, padding: "16px 24px", borderTop: "1px solid #F3F4F6", flexShrink: 0 },
+  confirmModal: { background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16, padding: 32, maxWidth: 440, width: "100%", boxShadow: "0 12px 48px rgba(0,0,0,0.15)" },
+  confirmTitle: { fontSize: 18, fontWeight: 900, color: "#111827", marginBottom: 10 },
   confirmText: { fontSize: 14, color: "#6B7280", lineHeight: 1.6, marginBottom: 0 },
   confirmBtns: { display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 24 },
-  btnPrimary: { padding: "10px 22px", background: "#111827", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 800, fontSize: 12, letterSpacing: "0.06em", fontFamily: "Montserrat, sans-serif" },
-  btnDisabled: { padding: "10px 22px", background: "#E5E7EB", color: "#9CA3AF", border: "none", borderRadius: 8, cursor: "not-allowed", fontWeight: 800, fontSize: 12 },
-  btnGhost: { padding: "10px 18px", background: "transparent", color: "#6B7280", border: "1px solid #E5E7EB", borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 12, fontFamily: "Montserrat, sans-serif" },
-  actionBtn: { padding: "6px 12px", border: "none", borderRadius: 7, cursor: "pointer", fontWeight: 700, fontSize: 10, letterSpacing: "0.04em", whiteSpace: "nowrap", fontFamily: "Montserrat, sans-serif" },
-  select: { padding: "7px 12px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 11, color: "#374151", background: "#fff", cursor: "pointer", fontWeight: 600, letterSpacing: "0.04em", fontFamily: "Montserrat, sans-serif" },
-  fab: { position: "fixed", bottom: 28, right: 28, width: 56, height: 56, borderRadius: "50%", background: "#111827", color: "#fff", border: "none", fontSize: 28, cursor: "pointer", boxShadow: "0 4px 20px rgba(0,0,0,0.25)", zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, fontWeight: 300 },
+  btnPrimary: { padding: "11px 24px", background: "#111827", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 800, fontSize: 12, letterSpacing: "0.06em", fontFamily: "Montserrat, sans-serif" },
+  btnDisabled: { padding: "11px 24px", background: "#E5E7EB", color: "#9CA3AF", border: "none", borderRadius: 8, cursor: "not-allowed", fontWeight: 800, fontSize: 12, fontFamily: "Montserrat, sans-serif" },
+  btnGhost: { padding: "11px 20px", background: "transparent", color: "#6B7280", border: "1px solid #E5E7EB", borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 12, fontFamily: "Montserrat, sans-serif" },
+  actionBtn: { padding: "7px 14px", border: "none", borderRadius: 7, cursor: "pointer", fontWeight: 700, fontSize: 11, letterSpacing: "0.04em", whiteSpace: "nowrap", fontFamily: "Montserrat, sans-serif" },
+  select: { padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 12, color: "#374151", background: "#fff", cursor: "pointer", fontWeight: 600, letterSpacing: "0.04em", fontFamily: "Montserrat, sans-serif" },
+  fab: { position: "fixed", bottom: 32, right: 32, width: 60, height: 60, borderRadius: "50%", background: "#111827", color: "#fff", border: "none", fontSize: 30, cursor: "pointer", boxShadow: "0 4px 24px rgba(0,0,0,0.28)", zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, fontWeight: 300 },
 };
