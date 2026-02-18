@@ -260,17 +260,38 @@ function StatCard({ label, value, sub, accent = "#111827" }) {
 // ─── FILE UPLOAD ──────────────────────────────────────────────────────────────
 function FileUploadBlock({ files, onChange, label = "📎 Listado de números y logos", hint = "Adjunta Excel, logos u otros archivos", accent = "#3B82F6" }) {
   const ref = useRef();
-  const add = e => {
-    onChange([...files, ...Array.from(e.target.files).map(f => ({ name: f.name, size: f.size, type: f.type, id: Date.now() + Math.random() }))]);
-    e.target.value = "";
-  };
+  const [uploading, setUploading] = useState(false);
   const fmt = b => b > 1048576 ? `${(b / 1048576).toFixed(1)}MB` : `${(b / 1024).toFixed(0)}KB`;
+
+  const add = async e => {
+    const selected = Array.from(e.target.files);
+    e.target.value = "";
+    if (!selected.length) return;
+    setUploading(true);
+    const uploaded = [];
+    for (const f of selected) {
+      const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const filePath = `pedidos/${Date.now()}_${safeName}`;
+      const { error } = await supabase.storage.from("archivos").upload(filePath, f, { upsert: false });
+      if (error) { alert(`Error subiendo ${f.name}: ${error.message}`); continue; }
+      const { data: urlData } = supabase.storage.from("archivos").getPublicUrl(filePath);
+      uploaded.push({ name: f.name, size: f.size, type: f.type, id: Date.now() + Math.random(), path: filePath, url: urlData.publicUrl });
+    }
+    onChange([...files, ...uploaded]);
+    setUploading(false);
+  };
+
+  const remove = async f => {
+    if (f.path) await supabase.storage.from("archivos").remove([f.path]);
+    onChange(files.filter(x => x.id !== f.id));
+  };
+
   return (
     <div style={{ ...S.uploadBlock, marginBottom: 14 }}>
       <div style={{ ...S.uploadTitle, color: accent === "#F59E0B" ? "#B45309" : "#6B7280" }}>{label}</div>
-      <div style={{ ...S.uploadDrop, borderColor: files.length > 0 ? accent : "#D1D5DB" }} onClick={() => ref.current.click()}>
-        <span style={{ fontSize: 20, opacity: 0.4 }}>⬆</span>
-        <span style={{ fontSize: 12, color: "#9CA3AF" }}>{hint}</span>
+      <div style={{ ...S.uploadDrop, borderColor: files.length > 0 ? accent : "#D1D5DB", opacity: uploading ? 0.6 : 1 }} onClick={() => !uploading && ref.current.click()}>
+        <span style={{ fontSize: 20, opacity: 0.4 }}>{uploading ? "⏳" : "⬆"}</span>
+        <span style={{ fontSize: 12, color: "#9CA3AF" }}>{uploading ? "Subiendo archivos a la nube..." : hint}</span>
         <input ref={ref} type="file" multiple style={{ display: "none" }} onChange={add} accept=".xls,.xlsx,.pdf,.png,.jpg,.jpeg,.ai,.svg,.eps,.zip" />
       </div>
       {files.length > 0 && (
@@ -280,7 +301,8 @@ function FileUploadBlock({ files, onChange, label = "📎 Listado de números y 
               <span>{f.type?.includes("image") ? "🖼" : "📄"}</span>
               <span style={{ flex: 1, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#374151" }}>{f.name}</span>
               <span style={{ fontSize: 11, color: "#9CA3AF" }}>{fmt(f.size)}</span>
-              <button onClick={() => onChange(files.filter(x => x.id !== f.id))} style={{ background: "none", border: "none", color: "#D1D5DB", cursor: "pointer", fontSize: 14 }}>✕</button>
+              {f.url && <a href={f.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: 11, color: "#3B82F6", textDecoration: "none", padding: "2px 8px", border: "1px solid #BFDBFE", borderRadius: 4, background: "#EFF6FF" }}>↓</a>}
+              <button onClick={() => remove(f)} style={{ background: "none", border: "none", color: "#D1D5DB", cursor: "pointer", fontSize: 14 }}>✕</button>
             </div>
           ))}
         </div>
@@ -375,11 +397,12 @@ function OrderDetailModal({ order, onClose }) {
               <span style={{ fontSize: 10, fontWeight: 700, color, background: bg, padding: "2px 8px", borderRadius: 4, border: `1px solid ${color}44` }}>
                 {f.type?.includes("image") ? "IMAGEN" : f.type?.includes("pdf") ? "PDF" : f.name?.split('.').pop()?.toUpperCase() || "ARCHIVO"}
               </span>
+              {f.url
+                ? <a href={f.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "#fff", background: color, textDecoration: "none", padding: "6px 14px", borderRadius: 6, whiteSpace: "nowrap" }}>↓ Descargar</a>
+                : <span style={{ fontSize: 11, color: "#9CA3AF", fontStyle: "italic" }}>sin URL</span>
+              }
             </div>
           ))}
-        </div>
-        <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 8, fontStyle: "italic" }}>
-          ⚠ Los archivos son referencias de nombre. Para descargarlos, el vendedor debe resubirlos o compartirlos directamente.
         </div>
       </div>
     );
