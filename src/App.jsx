@@ -358,13 +358,14 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDet
     <div style={{ ...S.orderCard, borderLeft: `3px solid ${urgent ? "#EF4444" : accentColor}` }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-          <span style={{ fontWeight: 800, fontSize: 15, color: "#111827" }}>{order.cliente}</span>
+          <span style={{ fontWeight: 800, fontSize: 15, color: "#111827", textTransform: "uppercase" }}>{order.cliente}</span>
           {isFour && order.express && <span style={S.chipExpress}>⚡ EXPRESS</span>}
-          {!isFour && <span style={{ ...S.chip, background: order.stage === "diseno" ? "#EDE9FE" : "#F3E8FF", color: order.stage === "diseno" ? "#6D28D9" : "#7C3AED" }}>{order.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN"}</span>}
+          {!isFour && <span style={{ ...S.chip, background: order.stage === "diseno" ? "#FEE2E2" : "#FEF3C7", color: order.stage === "diseno" ? "#DC2626" : "#D97706" }}>{order.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN"}</span>}
+          {order.listoAt && !order.deliveredAt && <span style={{ ...S.chip, background: "#DCFCE7", color: "#15803D" }}>✓ LISTO</span>}
           {totalFiles > 0 && <span style={{ ...S.chip, background: "#EFF6FF", color: "#3B82F6" }}>📎 {totalFiles}</span>}
         </div>
         <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexWrap: "wrap", marginBottom: 4 }}>
-          <span>{order.vendedor}</span>
+          <span style={{ fontWeight: 800, color: "#374151" }}>{order.vendedor}</span>
           <span>·</span><span>{order.deporte}</span>
           <span>·</span><span>{order.cantidad} prendas</span>
           <span>·</span><span style={{ fontWeight: 700, color: "#374151" }}>{fmtCurrency(order.valor)}</span>
@@ -491,7 +492,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
           {/* Status badges */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
             {isFour && order.express && <span style={{ ...S.chipExpress, fontSize: 12, padding: "4px 12px" }}>⚡ EXPRESS</span>}
-            {!isFour && <span style={{ ...S.chip, background: "#EDE9FE", color: "#6D28D9", fontSize: 12, padding: "4px 12px" }}>{order.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN"}</span>}
+            {!isFour && <span style={{ ...S.chip, background: order.stage === "diseno" ? "#FEE2E2" : "#FEF3C7", color: order.stage === "diseno" ? "#DC2626" : "#D97706", fontSize: 12, padding: "4px 12px" }}>{order.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN"}</span>}
             {order.revisionRazon && <span style={{ ...S.chip, background: "#FEF3C7", color: "#D97706", fontSize: 12, padding: "4px 12px" }}>⚠ EN REVISIÓN</span>}
             {order.listoAt && <span style={{ ...S.chip, background: "#DCFCE7", color: "#15803D", fontSize: 12, padding: "4px 12px" }}>✓ LISTO</span>}
           </div>
@@ -926,8 +927,14 @@ export default function App() {
     if (!order) return;
     const updated = { ...order, status: "active", revisionAt: null, revisionRazon: null, revisionBy: null };
     const newData = { ...data, revision: data.revision.filter(o => o.id !== id) };
-    if (order.type === "four") newData.four = [updated, ...data.four];
-    else newData.sub = [updated, ...data.sub];
+    if (order.type === "four") {
+      // Reinsert in original position by createdAt
+      const merged = [updated, ...data.four].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).reverse();
+      newData.four = merged;
+    } else {
+      const merged = [updated, ...data.sub].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).reverse();
+      newData.sub = merged;
+    }
     persist(newData, [updated]);
   };
   const editRevisionOrder = (id, updated) => {
@@ -1078,13 +1085,13 @@ export default function App() {
               )}
             </div>
 
-            {/* Admin only */}
-            {isAdmin && (
+            {/* Solo Genaro */}
+            {user?.email?.toLowerCase() === "genaro@four.cl" || user?.name?.toLowerCase() === "genaro gonzalez" || user?.name?.toLowerCase() === "genaro" ? (
               <button onClick={() => setView("usuarios")}
                 style={{ ...S.navBtn, ...(view === "usuarios" ? S.navBtnActive : {}), marginLeft: 8, borderLeft: "1px solid #374151", paddingLeft: 12 }}>
                 ⚙ USUARIOS
               </button>
-            )}
+            ) : null}
           </nav>
 
           {/* User */}
@@ -1338,7 +1345,7 @@ function Dashboard({ data, allPending }) {
         {/* Mini stats */}
         <div style={{ ...S.card, display: "flex", flexDirection: "column", gap: 0 }}>
           <div style={S.cardTitle}>RESUMEN OPERACIONAL</div>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 15 }}>
             <tbody>
               {[
                 { label: "Express activos",  value: express,  color: "#D97706", bg: "#FEF3C7" },
@@ -1346,9 +1353,9 @@ function Dashboard({ data, allPending }) {
                 { label: "Falta revisión",   value: revision, color: "#D97706", bg: "#FFFBEB" },
               ].map(row => (
                 <tr key={row.label} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                  <td style={{ padding: "10px 0", color: "#6B7280", fontWeight: 600 }}>{row.label}</td>
+                  <td style={{ padding: "16px 0", color: "#374151", fontWeight: 700, fontSize: 15 }}>{row.label}</td>
                   <td style={{ padding: "10px 0", textAlign: "right" }}>
-                    <span style={{ background: row.bg, color: row.color, fontWeight: 800, fontSize: 12, padding: "3px 10px", borderRadius: 6 }}>{row.value}</span>
+                    <span style={{ background: row.bg, color: row.color, fontWeight: 800, fontSize: 16, padding: "5px 14px", borderRadius: 8 }}>{row.value}</span>
                   </td>
                 </tr>
               ))}
@@ -1600,12 +1607,12 @@ function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetai
           <div key={o.id} style={{ ...S.orderCard, borderLeft: "3px solid #F59E0B", background: "#FFFBEB" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-                <span style={{ fontWeight: 800, fontSize: 15, color: "#111827" }}>{o.cliente}</span>
+                <span style={{ fontWeight: 800, fontSize: 15, color: "#111827", textTransform: "uppercase" }}>{o.cliente}</span>
                 <span style={{ ...S.chip, background: "#FEF3C7", color: "#D97706" }}>⚠ REVISIÓN</span>
-                <span style={{ ...S.chip, background: o.type === "four" ? "#EFF6FF" : "#EDE9FE", color: o.type === "four" ? "#3B82F6" : "#7C3AED" }}>{o.type === "four" ? "FOUR" : "SUBLIMADO"}</span>
+                <span style={{ ...S.chip, background: o.type === "four" ? "#EFF6FF" : (o.stage === "diseno" ? "#FEE2E2" : "#FEF3C7"), color: o.type === "four" ? "#3B82F6" : (o.stage === "diseno" ? "#DC2626" : "#D97706") }}>{o.type === "four" ? "FOUR" : (o.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN")}</span>
               </div>
               <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexWrap: "wrap" }}>
-                <span>{o.vendedor}</span><span>·</span><span>{o.deporte}</span><span>·</span>
+                <span style={{ fontWeight: 800, color: "#374151" }}>{o.vendedor}</span><span>·</span><span>{o.deporte}</span><span>·</span>
                 <span>{o.cantidad} prendas</span><span>·</span>
                 <span style={{ fontWeight: 700, color: "#374151" }}>{fmtCurrency(o.valor)}</span>
                 {o.notaVenta && <><span>·</span><span style={{ fontWeight: 700, color: "#9CA3AF" }}>NV #{o.notaVenta}</span></>}
@@ -1651,15 +1658,15 @@ function ListoPendienteView({ orders, onEntregado, onDetail }) {
           <div key={o.id} style={{ ...S.orderCard, borderLeft: "3px solid #059669", background: "#F0FDF4" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-                <span style={{ fontWeight: 800, fontSize: 15, color: "#111827" }}>{o.cliente}</span>
+                <span style={{ fontWeight: 800, fontSize: 15, color: "#111827", textTransform: "uppercase" }}>{o.cliente}</span>
                 <span style={{ ...S.chip, background: "#DCFCE7", color: "#15803D" }}>✓ LISTO</span>
-                <span style={{ ...S.chip, background: o.type === "four" ? "#EFF6FF" : "#EDE9FE", color: o.type === "four" ? "#3B82F6" : "#7C3AED" }}>
-                  {o.type === "four" ? (o.express ? "⚡ EXPRESS" : "FOUR") : "SUBLIMADO"}
+                <span style={{ ...S.chip, background: o.type === "four" ? "#EFF6FF" : (o.stage === "diseno" ? "#FEE2E2" : "#FEF3C7"), color: o.type === "four" ? "#3B82F6" : (o.stage === "diseno" ? "#DC2626" : "#D97706") }}>
+                  {o.type === "four" ? (o.express ? "⚡ EXPRESS" : "FOUR") : (o.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN")}
                 </span>
                 {o.files?.length > 0 && <span style={{ ...S.chip, background: "#EFF6FF", color: "#3B82F6" }}>📎 {o.files.length}</span>}
               </div>
               <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexWrap: "wrap", marginBottom: 4 }}>
-                <span>{o.vendedor}</span><span>·</span>
+                <span style={{ fontWeight: 800, color: "#374151" }}>{o.vendedor}</span><span>·</span>
                 <span>{o.deporte}</span><span>·</span>
                 <span>{o.cantidad} prendas</span><span>·</span>
                 <span style={{ fontWeight: 700, color: "#374151" }}>{fmtCurrency(o.valor)}</span>
@@ -1699,14 +1706,14 @@ function ListoEntregadoView({ orders, onDetail }) {
           <div key={o.id} style={{ ...S.orderCard, borderLeft: "3px solid #374151" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-                <span style={{ fontWeight: 800, fontSize: 15, color: "#111827" }}>{o.cliente}</span>
+                <span style={{ fontWeight: 800, fontSize: 15, color: "#111827", textTransform: "uppercase" }}>{o.cliente}</span>
                 <span style={{ ...S.chip, background: "#F3F4F6", color: "#374151" }}>✓ ENTREGADO</span>
-                <span style={{ ...S.chip, background: o.type === "four" ? "#EFF6FF" : "#EDE9FE", color: o.type === "four" ? "#3B82F6" : "#7C3AED" }}>
-                  {o.type === "four" ? (o.express ? "⚡ EXPRESS" : "FOUR") : "SUBLIMADO"}
+                <span style={{ ...S.chip, background: o.type === "four" ? "#EFF6FF" : (o.stage === "diseno" ? "#FEE2E2" : "#FEF3C7"), color: o.type === "four" ? "#3B82F6" : (o.stage === "diseno" ? "#DC2626" : "#D97706") }}>
+                  {o.type === "four" ? (o.express ? "⚡ EXPRESS" : "FOUR") : (o.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN")}
                 </span>
               </div>
               <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexWrap: "wrap", marginBottom: 4 }}>
-                <span>{o.vendedor}</span><span>·</span>
+                <span style={{ fontWeight: 800, color: "#374151" }}>{o.vendedor}</span><span>·</span>
                 <span>{o.deporte}</span><span>·</span>
                 <span>{o.cantidad} prendas</span><span>·</span>
                 <span style={{ fontWeight: 700, color: "#374151" }}>{fmtCurrency(o.valor)}</span>
@@ -1913,7 +1920,7 @@ const S = {
   app:  { minHeight: "100vh", background: "#F9FAFB", fontFamily: "Montserrat, sans-serif", color: "#111827" },
   header: { background: "#111827", borderBottom: "1px solid #1F2937", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 12px rgba(0,0,0,0.22)" },
   headerInner: { width: "100%", padding: "0 40px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 68, gap: 20, boxSizing: "border-box" },
-  navBtn: { padding: "8px 16px", background: "transparent", color: "#6B7280", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", whiteSpace: "nowrap", fontFamily: "Montserrat, sans-serif" },
+  navBtn: { padding: "8px 18px", background: "transparent", color: "#6B7280", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 13, fontWeight: 700, letterSpacing: "0.08em", whiteSpace: "nowrap", fontFamily: "NikeFutura, Montserrat, sans-serif" },
   navBtnActive: { color: "#F9FAFB", background: "#1F2937" },
   main: { width: "100%", padding: "32px 40px 90px", boxSizing: "border-box" },
   pageTitle: { fontSize: 24, fontWeight: 900, color: "#111827", letterSpacing: "-0.01em", margin: "0 0 20px", fontFamily: "NikeFutura, Montserrat, sans-serif" },
