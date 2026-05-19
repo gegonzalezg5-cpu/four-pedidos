@@ -153,6 +153,7 @@ function rowToOrder(row) {
     files:             row.files || [],
     filesNota:         row.files_nota || [],
     editedAt:          row.edited_at,
+    sortOrder:         row.sort_order || 0,
   };
 }
 
@@ -187,6 +188,7 @@ function orderToRow(o) {
     files:               o.files || [],
     files_nota:          o.filesNota || [],
     edited_at:           o.editedAt || null,
+    sort_order:          o.sortOrder || 0,
   };
 }
 
@@ -203,6 +205,10 @@ async function loadDataFromSupabase() {
       else if (o.type === "four") result.four.push(o);
       else if (o.type === "sub") result.sub.push(o);
     }
+    // Sort by sortOrder (manual), then by createdAt (newest first)
+    const sortList = arr => [...arr].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || new Date(b.createdAt) - new Date(a.createdAt));
+    result.four = sortList(result.four);
+    result.sub = sortList(result.sub);
     return result;
   } catch (e) {
     console.warn("Supabase load failed, falling back to localStorage:", e);
@@ -434,12 +440,62 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
   const [editingFiles, setEditingFiles] = useState(false);
   const [editFiles, setEditFiles] = useState(initialOrder.files || []);
   const [editFilesNota, setEditFilesNota] = useState(initialOrder.filesNota || []);
+  const [editingInfo, setEditingInfo] = useState(false);
+  const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
   const isAdmin = currentUser?.role === "admin";
-  const canEdit = true; // both admin and vendedor can edit files from detail
 
   const isFour = order.type === "four";
   const dl = isFour ? order.deadline : (order.stage === "produccion" ? order.deadlineProduccion : order.deadlineDiseno);
+
+  const openEditInfo = () => {
+    setEditForm({
+      cliente:   order.cliente   || "",
+      notaVenta: order.notaVenta || "",
+      vendedor:  order.vendedor  || SELLERS[0],
+      deporte:   order.deporte   || SPORTS[0],
+      cantidad:  order.cantidad  || "",
+      valor:     order.valor     || "",
+      notas:     order.notas     || "",
+      express:   order.express   || false,
+      type:      order.type      || "four",
+    });
+    setEditingInfo(true);
+  };
+
+  const saveInfo = async () => {
+    setSaving(true);
+    // Recalculate deadline if type or express changed (keep original fechaEnvio/horaEnvio)
+    let patches = { ...editForm, cantidad: +editForm.cantidad, valor: +editForm.valor };
+    if (editForm.type === "four") {
+      patches.deadline = calcDeadlineFour(order.fechaEnvio, order.horaEnvio, editForm.express).toISOString();
+      patches.stage = null;
+    } else if (editForm.type !== order.type) {
+      // switching to sub
+      patches.deadlineDiseno = calcDeadlineSubDiseno(order.fechaEnvio, order.horaEnvio).toISOString();
+      patches.stage = "diseno";
+      patches.deadline = null;
+    }
+    const updated = { ...order, ...patches };
+    await supabase.from("pedidos").update({
+      cliente:    patches.cliente,
+      nota_venta: patches.notaVenta || null,
+      vendedor:   patches.vendedor,
+      deporte:    patches.deporte,
+      cantidad:   patches.cantidad,
+      valor:      patches.valor,
+      notas:      patches.notas || null,
+      express:    patches.express || false,
+      type:       patches.type,
+      stage:      patches.stage || null,
+      deadline:   patches.deadline || null,
+      deadline_diseno: patches.deadlineDiseno || null,
+    }).eq("id", order.id);
+    setOrder(updated);
+    if (onSaveFiles) onSaveFiles(updated);
+    setEditingInfo(false);
+    setSaving(false);
+  };
 
   const saveFiles = async () => {
     setSaving(true);
@@ -548,6 +604,75 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
               <div style={{ fontSize: 10, fontWeight: 800, color: "#B45309", letterSpacing: "0.08em", marginBottom: 6 }}>MOTIVO DE REVISIÓN</div>
               <div style={{ fontSize: 13, color: "#92400E", lineHeight: 1.6 }}>{order.revisionRazon}</div>
               {order.revisionBy && <div style={{ fontSize: 11, color: "#D97706", marginTop: 6 }}>Por: {order.revisionBy} · {fmtDate(order.revisionAt)}</div>}
+            </div>
+          )}
+
+          {/* Edit info panel */}
+          {editingInfo ? (
+            <div style={{ background: "#F0F9FF", border: "1px solid #BAE6FD", borderRadius: 12, padding: 18, marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: "#0369A1", fontWeight: 700, marginBottom: 14 }}>✏ Editando información del pedido</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={S.label}>Cliente *</label>
+                  <input style={{ ...S.input, marginTop: 5 }} value={editForm.cliente} onChange={e => setEditForm({...editForm, cliente: e.target.value})} placeholder="Nombre del cliente" />
+                </div>
+                <div>
+                  <label style={S.label}>N° Nota de Venta</label>
+                  <input style={{ ...S.input, marginTop: 5 }} value={editForm.notaVenta} onChange={e => setEditForm({...editForm, notaVenta: e.target.value})} placeholder="Ej: 000123" />
+                </div>
+                <div>
+                  <label style={S.label}>Vendedor</label>
+                  <select style={{ ...S.input, marginTop: 5 }} value={editForm.vendedor} onChange={e => setEditForm({...editForm, vendedor: e.target.value})}>
+                    {SELLERS.map(v => <option key={v}>{v}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={S.label}>Deporte</label>
+                  <select style={{ ...S.input, marginTop: 5 }} value={editForm.deporte} onChange={e => setEditForm({...editForm, deporte: e.target.value})}>
+                    {SPORTS.map(sp => <option key={sp}>{sp}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={S.label}>Cantidad</label>
+                  <input style={{ ...S.input, marginTop: 5 }} type="number" min="1" value={editForm.cantidad} onChange={e => setEditForm({...editForm, cantidad: e.target.value})} />
+                </div>
+                <div>
+                  <label style={S.label}>Valor ($)</label>
+                  <input style={{ ...S.input, marginTop: 5 }} type="number" min="0" value={editForm.valor} onChange={e => setEditForm({...editForm, valor: e.target.value})} />
+                </div>
+                <div>
+                  <label style={S.label}>Tipo</label>
+                  <select style={{ ...S.input, marginTop: 5 }} value={editForm.type} onChange={e => setEditForm({...editForm, type: e.target.value})}>
+                    <option value="four">Pedido Four</option>
+                    <option value="sub">Sublimado</option>
+                  </select>
+                </div>
+                {editForm.type === "four" && (
+                  <div>
+                    <label style={S.label}>Entrega</label>
+                    <div style={{ display: "flex", gap: 8, marginTop: 5 }}>
+                      <button onClick={() => setEditForm({...editForm, express: false})} style={!editForm.express ? { ...S.toggleBtn, ...S.toggleActive } : S.toggleBtn}>📦 Normal</button>
+                      <button onClick={() => setEditForm({...editForm, express: true})} style={editForm.express ? { ...S.toggleBtn, ...S.toggleExpress } : S.toggleBtn}>⚡ Express</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div style={{ background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 8, padding: "8px 12px", fontSize: 12, color: "#92400E", marginBottom: 12 }}>
+                🔒 La fecha de ingreso ({fmtDate(order.createdAt)} {order.horaEnvio}) no se puede modificar.
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={() => setEditingInfo(false)} style={{ ...S.btnGhost, flex: 1 }}>Cancelar</button>
+                <button onClick={saveInfo} disabled={saving || !editForm.cliente} style={{ ...S.btnPrimary, flex: 2, background: "#0369A1", opacity: saving ? 0.7 : 1 }}>
+                  {saving ? "Guardando..." : "✓ Guardar cambios"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+              <button onClick={openEditInfo}
+                style={{ fontSize: 12, fontWeight: 700, color: "#0369A1", background: "#F0F9FF", border: "1px solid #BAE6FD", borderRadius: 6, padding: "5px 12px", cursor: "pointer" }}>
+                ✏ Editar pedido
+              </button>
             </div>
           )}
 
@@ -980,6 +1105,19 @@ export default function App() {
     }, [patched]);
   };
   const deleteDel = id => persist({ ...data, delivered: data.delivered.filter(d => d.id !== id) }, []);
+
+  const reorderList = async (listKey, newList) => {
+    // Assign sort_order based on new position
+    const updated = newList.map((o, i) => ({ ...o, sortOrder: i }));
+    const newData = { ...data, [listKey]: updated };
+    setData(newData);
+    saveData(newData);
+    // Persist sort_order for all reordered items
+    const rows = updated.map(o => ({ id: o.id, sort_order: o.sortOrder }));
+    for (const row of rows) {
+      await supabase.from("pedidos").update({ sort_order: row.sort_order }).eq("id", row.id);
+    }
+  };
   const deleteOrder = async (id, type) => {
     // Remove files from storage first
     const lists = [data.four, data.sub, data.listo, data.revision, data.delivered];
@@ -1022,7 +1160,7 @@ export default function App() {
   const allPending = [...data.four, ...data.sub];
   const revisionCount = (data.revision || []).length;
   const listoCount = (data.listo || []).length;
-  const pedidosViews = ["todos","four","sub"];
+  const pedidosViews = ["todos","four","sub","pedidos_dia"];
   const isPedidosActive = pedidosViews.includes(view);
   const listoViews = ["listo_pendiente","listo_entregado"];
   const isListoActive = listoViews.includes(view);
@@ -1043,6 +1181,25 @@ export default function App() {
               style={{ ...S.navBtn, ...(view === "dashboard" ? S.navBtnActive : {}) }}>
               DASHBOARD
             </button>
+
+            {/* Pedidos del Día */}
+            {(() => {
+              const hoy = new Date(); hoy.setHours(0,0,0,0);
+              const manana = new Date(hoy); manana.setDate(hoy.getDate() + 1);
+              const diaFour = [...data.four, ...(data.revision||[]).filter(o=>o.type==="four")]
+                .filter(o => { const dl = o.deadline; if (!dl) return false; const d = new Date(dl); return d < manana; })
+                .length;
+              const diaSub = [...data.sub, ...(data.revision||[]).filter(o=>o.type==="sub")]
+                .filter(o => { const dl = o.stage==="produccion" ? o.deadlineProduccion : o.deadlineDiseno; if (!dl) return false; const d = new Date(dl); return d < manana; })
+                .slice(0,1).length;
+              const diaCount = diaFour + diaSub;
+              return (
+                <button onClick={() => setView("pedidos_dia")}
+                  style={{ ...S.navBtn, ...(view === "pedidos_dia" ? S.navBtnActive : {}), ...(diaCount > 0 ? { color: "#EF4444" } : {}) }}>
+                  🔥 HOY {diaCount > 0 ? `(${diaCount})` : ""}
+                </button>
+              );
+            })()}
 
             {/* Pedidos dropdown */}
             <div ref={pedidosRef} style={{ position: "relative" }}>
@@ -1160,17 +1317,25 @@ export default function App() {
           ) : null;
         })()}
         {view === "dashboard"  && <Dashboard data={data} allPending={allPending} />}
-        {view === "todos"      && <TodosView orders={allPending} isAdmin={isAdmin} onDeliver={(id, t) => setConfirm({ type: t, id, action: "deliver" })} onApprove={id => setConfirm({ type: "sub", id, action: "approve" })} onRevision={(id, t) => setConfirm({ type: t, id, action: "revision" })} onDetail={o => setDetailOrder(o)} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} />}
-        {view === "four"       && <FourView  orders={data.four}  isAdmin={isAdmin} onDeliver={id => setConfirm({ type: "four", id, action: "deliver" })} onRevision={id => setConfirm({ type: "four", id, action: "revision" })} onDetail={o => setDetailOrder(o)} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} />}
-        {view === "sub"        && <SubView   orders={data.sub}   isAdmin={isAdmin} onApprove={id => setConfirm({ type: "sub", id, action: "approve" })} onDeliver={id => setConfirm({ type: "sub", id, action: "deliver" })} onRevision={id => setConfirm({ type: "sub", id, action: "revision" })} onDetail={o => setDetailOrder(o)} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} />}
-        {view === "revision"        && isAdmin && <RevisionView orders={data.revision || []} isAdmin={isAdmin} onRestore={restoreFromRevision} onMarkListo={id => setConfirm({ type: "rev", id, action: "deliver" })} onEdit={o => setEditOrder(o)} onDetail={o => setDetailOrder(o)} />}
+        {view === "pedidos_dia" && <PedidosDiaView orders={allPending} onDetail={o => setDetailOrder(o)} onDeliver={(id, t) => setConfirm({ type: t, id, action: "deliver" })} onRevision={(id, t) => setConfirm({ type: t, id, action: "revision" })} isAdmin={isAdmin} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} />}
+        {(() => {
+          const isGenaro = user?.name?.toLowerCase().includes("genaro") || user?.email?.toLowerCase().includes("genaro");
+          return (
+            <>
+              {view === "todos"      && <TodosView orders={allPending} isAdmin={isAdmin} onDeliver={(id, t) => setConfirm({ type: t, id, action: "deliver" })} onApprove={id => setConfirm({ type: "sub", id, action: "approve" })} onRevision={(id, t) => setConfirm({ type: t, id, action: "revision" })} onDetail={o => setDetailOrder(o)} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} />}
+              {view === "four"       && <FourView  orders={data.four}  isAdmin={isAdmin} onDeliver={id => setConfirm({ type: "four", id, action: "deliver" })} onRevision={id => setConfirm({ type: "four", id, action: "revision" })} onDetail={o => setDetailOrder(o)} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} onReorder={isGenaro ? newList => reorderList("four", newList) : null} />}
+              {view === "sub"        && <SubView   orders={data.sub}   isAdmin={isAdmin} onApprove={id => setConfirm({ type: "sub", id, action: "approve" })} onDeliver={id => setConfirm({ type: "sub", id, action: "deliver" })} onRevision={id => setConfirm({ type: "sub", id, action: "revision" })} onDetail={o => setDetailOrder(o)} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} onReorder={isGenaro ? newList => reorderList("sub", newList) : null} />}
+            </>
+          );
+        })()}
+        {view === "revision"        && isAdmin && <RevisionView orders={data.revision || []} isAdmin={isAdmin} onRestore={restoreFromRevision} onMarkListo={id => setConfirm({ type: "rev", id, action: "deliver" })} onEdit={o => setEditOrder(o)} onDetail={o => setDetailOrder(o)} canEditOrders={user?.name?.toLowerCase().includes("genaro") || user?.email?.toLowerCase().includes("genaro")} />}
         {view === "listo_pendiente" && <ListoPendienteView orders={data.listo || []} onEntregado={id => setConfirm({ type: "listo", id, action: "despachar" })} onDetail={o => setDetailOrder(o)} />}
         {view === "listo_entregado" && <ListoEntregadoView orders={data.delivered || []} onDetail={o => setDetailOrder(o)} />}
         {view === "usuarios"        && isAdmin && <UsuariosView currentUser={user} />}
       </main>
 
       <button style={S.fab} onClick={() => setShowNew(true)}>＋</button>
-      {(showNew || editOrder) && (
+      {(showNew || (editOrder && (user?.name?.toLowerCase().includes("genaro") || user?.email?.toLowerCase().includes("genaro")))) && (
         <NewOrderModal
           onClose={() => { setShowNew(false); setEditOrder(null); }}
           onAddFour={addFour}
@@ -1530,6 +1695,120 @@ function Dashboard({ data, allPending }) {
   );
 }
 
+// ─── PEDIDOS DEL DÍA VIEW ────────────────────────────────────────────────────
+function PedidosDiaView({ orders, onDetail, onDeliver, onRevision, onDelete, isAdmin }) {
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const manana = new Date(hoy); manana.setDate(hoy.getDate() + 1);
+
+  // Four: todos los vencidos o que vencen hoy, ordenados de más urgente (más vencido) a menos
+  const fourDia = orders
+    .filter(o => o.type === "four")
+    .filter(o => { const dl = o.deadline; if (!dl) return false; return new Date(dl) < manana; })
+    .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
+    .slice(0, 10);
+
+  // Sub: solo el MÁS urgente (1 pedido)
+  const subDia = orders
+    .filter(o => o.type === "sub")
+    .filter(o => {
+      const dl = o.stage === "produccion" ? o.deadlineProduccion : o.deadlineDiseno;
+      if (!dl) return false;
+      return new Date(dl) < manana;
+    })
+    .sort((a, b) => {
+      const da = a.stage === "produccion" ? a.deadlineProduccion : a.deadlineDiseno;
+      const db = b.stage === "produccion" ? b.deadlineProduccion : b.deadlineDiseno;
+      return new Date(da) - new Date(db);
+    })
+    .slice(0, 1);
+
+  const total = fourDia.length + subDia.length;
+
+  const NeonDivider = ({ label }) => (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#111827", borderRadius: 10, padding: "16px 22px", marginBottom: 8, marginTop: 4 }}>
+      <span style={{ fontFamily: "NikeFutura, Montserrat, sans-serif", fontSize: 16, fontWeight: 900, color: "#39FF14", letterSpacing: "0.12em", textTransform: "uppercase", textShadow: "0 0 10px #39FF14, 0 0 20px #39FF1466" }}>{label}</span>
+    </div>
+  );
+
+  const DiaCard = ({ o, rank }) => {
+    const isFour = o.type === "four";
+    const dl = isFour ? o.deadline : (o.stage === "produccion" ? o.deadlineProduccion : o.deadlineDiseno);
+    const days = dl ? dLeft(dl) : null;
+    const isVencido = days !== null && days < 0;
+    const isHoy = days === 0;
+    return (
+      <div style={{ ...S.orderCard, borderLeft: `4px solid ${isVencido ? "#DC2626" : "#F59E0B"}`, background: isVencido ? "#FFF5F5" : "#FFFBEB" }}>
+        <div style={{ width: 32, height: 32, borderRadius: "50%", background: isVencido ? "#DC2626" : "#F59E0B", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 900, flexShrink: 0 }}>{rank}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5, flexWrap: "wrap" }}>
+            <span style={{ fontWeight: 900, fontSize: 17, color: "#111827", textTransform: "uppercase" }}>{o.cliente}</span>
+            {isFour && o.express && <span style={S.chipExpress}>⚡ EXPRESS</span>}
+            {!isFour && <span style={{ ...S.chip, background: o.stage === "diseno" ? "#FEE2E2" : "#FEF3C7", color: o.stage === "diseno" ? "#DC2626" : "#D97706" }}>{o.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN"}</span>}
+            <span style={{ ...S.chip, background: isVencido ? "#FEE2E2" : "#FEF3C7", color: isVencido ? "#DC2626" : "#D97706", fontWeight: 800 }}>
+              {isVencido ? `VENCIDO ${Math.abs(days)}d` : "HOY"}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexWrap: "wrap", marginBottom: 4 }}>
+            <span style={{ fontWeight: 800, color: "#374151" }}>{o.vendedor}</span>
+            <span>·</span><span>{o.deporte}</span>
+            <span>·</span><span>{o.cantidad} prendas</span>
+            <span>·</span><span style={{ fontWeight: 700, color: "#374151" }}>{fmtCurrency(o.valor)}</span>
+            {o.notaVenta && <><span>·</span><span style={{ fontWeight: 700, color: "#9CA3AF" }}>NV #{o.notaVenta}</span></>}
+          </div>
+          <div style={{ fontSize: 13, color: "#6B7280", fontWeight: 600, marginTop: 3 }}>📅 Entrega: {fmtDate(dl)}</div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0, marginLeft: 12 }}>
+          <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
+          {isAdmin && <button style={{ ...S.actionBtn, background: "#059669", color: "#fff" }} onClick={() => onDeliver(o.id, o.type)}>✓ Marcar listo</button>}
+          {isAdmin && <button style={{ ...S.actionBtn, background: "#F59E0B", color: "#fff" }} onClick={() => onRevision(o.id, o.type)}>⚠ Revisión</button>}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h2 style={{ ...S.pageTitle, margin: 0 }}>Pedidos del Día</h2>
+          <p style={{ fontSize: 13, color: "#9CA3AF", margin: "4px 0 0", fontFamily: "Montserrat, sans-serif" }}>
+            Pedidos vencidos y con entrega para hoy, ordenados de más a menos urgente.
+          </p>
+        </div>
+        {total === 0 && <span style={{ background: "#DCFCE7", color: "#15803D", fontSize: 13, fontWeight: 700, padding: "6px 16px", borderRadius: 8 }}>✓ Sin urgencias hoy</span>}
+      </div>
+
+      {total === 0 ? (
+        <div style={S.emptyCard}>No hay pedidos vencidos ni con entrega para hoy 🎉</div>
+      ) : (
+        <>
+          <NeonDivider label={`Pedidos Four · ${fourDia.length}`} />
+          {fourDia.length === 0
+            ? <div style={{ ...S.emptyCard, marginBottom: 16 }}>Sin pedidos Four urgentes hoy</div>
+            : fourDia.map((o, i) => <DiaCard key={o.id} o={o} rank={i + 1} />)
+          }
+
+          <div style={{ marginTop: 16 }}>
+            <NeonDivider label={`Sublimado · ${subDia.length} (máx. 1)`} />
+            {subDia.length === 0
+              ? <div style={{ ...S.emptyCard, marginBottom: 16 }}>Sin sublimados urgentes hoy</div>
+              : subDia.map((o, i) => <DiaCard key={o.id} o={o} rank={1} />)
+            }
+            {subDia.length === 0 && orders.filter(o => o.type === "sub").filter(o => {
+              const dl = o.stage === "produccion" ? o.deadlineProduccion : o.deadlineDiseno;
+              return dl && new Date(dl) >= manana;
+            }).length > 0 && (
+              <div style={{ fontSize: 12, color: "#9CA3AF", padding: "8px 16px", fontStyle: "italic" }}>
+                Solo se puede entregar 1 sublimado por día. El siguiente en cola está pendiente.
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── TODOS VIEW ───────────────────────────────────────────────────────────────
 function TodosView({ orders, isAdmin, onDeliver, onApprove, onRevision, onDetail }) {
   const [fv, setFv] = useState("Todos");
@@ -1570,63 +1849,129 @@ function TodosView({ orders, isAdmin, onDeliver, onApprove, onRevision, onDetail
 }
 
 // ─── FOUR VIEW ────────────────────────────────────────────────────────────────
-function FourView({ orders, isAdmin, onDeliver, onRevision, onDetail, onDelete }) {
+function FourView({ orders, isAdmin, onDeliver, onRevision, onDetail, onDelete, onReorder }) {
   const [fv, setFv] = useState("Todos");
-  const filtered = orders.filter(o => fv === "Todos" || o.vendedor === fv).sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
+  const filtered = fv === "Todos" ? [...orders] : orders.filter(o => o.vendedor === fv);
+
+  const handleDragStart = (i) => setDragIdx(i);
+  const handleDragOver = (e, i) => { e.preventDefault(); setDragOverIdx(i); };
+  const handleDrop = (i) => {
+    if (dragIdx === null || dragIdx === i || !onReorder) return;
+    const newList = [...filtered];
+    const [moved] = newList.splice(dragIdx, 1);
+    newList.splice(i, 0, moved);
+    // Merge back non-filtered items
+    if (fv === "Todos") { onReorder(newList); }
+    else {
+      const rest = orders.filter(o => o.vendedor !== fv);
+      onReorder([...newList, ...rest]);
+    }
+    setDragIdx(null); setDragOverIdx(null);
+  };
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
-        <h2 style={{ ...S.pageTitle, margin: 0 }}>Pedidos Four</h2>
+        <div>
+          <h2 style={{ ...S.pageTitle, margin: 0 }}>Pedidos Four</h2>
+          {onReorder && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>✦ Arrastra las tarjetas para cambiar el orden</div>}
+        </div>
         <select style={S.select} value={fv} onChange={e => setFv(e.target.value)}>
           <option>Todos</option>{SELLERS.map(s => <option key={s}>{s}</option>)}
         </select>
       </div>
       {filtered.length === 0 ? <div style={S.emptyCard}>Sin Pedidos Four activos</div>
-        : filtered.map(o => <OrderCard key={o.id} order={o} accentColor="#3B82F6" isAdmin={isAdmin}
-            onDetail={() => onDetail(o)}
-            onDeliver={() => onDeliver(o.id)}
-            onRevision={isAdmin ? () => onRevision(o.id) : null}
-            onDelete={isAdmin ? () => onDelete(o.id) : null} />)}
+        : filtered.map((o, i) => (
+          <div key={o.id}
+            draggable={!!onReorder}
+            onDragStart={() => handleDragStart(i)}
+            onDragOver={e => handleDragOver(e, i)}
+            onDrop={() => handleDrop(i)}
+            onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
+            style={{ opacity: dragIdx === i ? 0.4 : 1, borderTop: dragOverIdx === i && dragIdx !== i ? "3px solid #39FF14" : "3px solid transparent", transition: "opacity 0.15s", cursor: onReorder ? "grab" : "default" }}>
+            <OrderCard order={o} accentColor="#3B82F6" isAdmin={isAdmin}
+              onDetail={() => onDetail(o)}
+              onDeliver={() => onDeliver(o.id)}
+              onRevision={isAdmin ? () => onRevision(o.id) : null}
+              onDelete={isAdmin ? () => onDelete(o.id) : null} />
+          </div>
+        ))}
     </div>
   );
 }
 
 // ─── SUB VIEW ─────────────────────────────────────────────────────────────────
-function SubView({ orders, isAdmin, onApprove, onDeliver, onRevision, onDetail, onDelete }) {
+function SubView({ orders, isAdmin, onApprove, onDeliver, onRevision, onDetail, onDelete, onReorder }) {
   const [fv, setFv] = useState("Todos");
-  const filtered = orders.filter(o => fv === "Todos" || o.vendedor === fv);
-  const enD = filtered.filter(o => o.stage === "diseno").sort((a, b) => new Date(a.deadlineDiseno) - new Date(b.deadlineDiseno));
-  const enP = filtered.filter(o => o.stage === "produccion").sort((a, b) => new Date(a.deadlineProduccion) - new Date(b.deadlineProduccion));
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
+  const [dragSection, setDragSection] = useState(null);
+  const filtered = fv === "Todos" ? [...orders] : orders.filter(o => o.vendedor === fv);
+  const enD = filtered.filter(o => o.stage === "diseno");
+  const enP = filtered.filter(o => o.stage === "produccion");
+
+  const handleDragStart = (i, section) => { setDragIdx(i); setDragSection(section); };
+  const handleDragOver = (e, i, section) => { e.preventDefault(); if (section === dragSection) setDragOverIdx(i); };
+  const handleDrop = (i, section) => {
+    if (dragIdx === null || dragIdx === i || section !== dragSection || !onReorder) return;
+    const sectionList = section === "diseno" ? [...enD] : [...enP];
+    const [moved] = sectionList.splice(dragIdx, 1);
+    sectionList.splice(i, 0, moved);
+    const otherSection = section === "diseno" ? enP : enD;
+    const newFiltered = section === "diseno" ? [...sectionList, ...otherSection] : [...otherSection, ...sectionList];
+    if (fv === "Todos") { onReorder(newFiltered); }
+    else {
+      const rest = orders.filter(o => o.vendedor !== fv);
+      onReorder([...newFiltered, ...rest]);
+    }
+    setDragIdx(null); setDragOverIdx(null); setDragSection(null);
+  };
+
+  const DraggableCard = ({ o, i, section, accentColor, extraProps }) => (
+    <div
+      draggable={!!onReorder}
+      onDragStart={() => handleDragStart(i, section)}
+      onDragOver={e => handleDragOver(e, i, section)}
+      onDrop={() => handleDrop(i, section)}
+      onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); setDragSection(null); }}
+      style={{ opacity: dragIdx === i && dragSection === section ? 0.4 : 1, borderTop: dragOverIdx === i && dragSection === section && dragIdx !== i ? "3px solid #39FF14" : "3px solid transparent", transition: "opacity 0.15s", cursor: onReorder ? "grab" : "default" }}>
+      <OrderCard order={o} accentColor={accentColor} isAdmin={isAdmin}
+        onDetail={() => onDetail(o)}
+        onRevision={isAdmin ? () => onRevision(o.id) : null}
+        onDelete={isAdmin ? () => onDelete(o.id) : null}
+        {...extraProps} />
+    </div>
+  );
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
-        <h2 style={{ ...S.pageTitle, margin: 0 }}>Pedidos Sublimados</h2>
+        <div>
+          <h2 style={{ ...S.pageTitle, margin: 0 }}>Pedidos Sublimados</h2>
+          {onReorder && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>✦ Arrastra las tarjetas para cambiar el orden</div>}
+        </div>
         <select style={S.select} value={fv} onChange={e => setFv(e.target.value)}>
           <option>Todos</option>{SELLERS.map(s => <option key={s}>{s}</option>)}
         </select>
       </div>
       <Section title="En Diseño" count={enD.length} accent="#8B5CF6">
         {enD.length === 0 ? <div style={S.emptyCard}>Sin pedidos en diseño</div>
-          : enD.map(o => <OrderCard key={o.id} order={o} accentColor="#8B5CF6" isAdmin={isAdmin}
-              onDetail={() => onDetail(o)}
-              onApprove={() => onApprove(o.id)} onDeliver={() => onDeliver(o.id)}
-              onRevision={isAdmin ? () => onRevision(o.id) : null}
-              onDelete={isAdmin ? () => onDelete(o.id) : null} />)}
+          : enD.map((o, i) => <DraggableCard key={o.id} o={o} i={i} section="diseno" accentColor="#8B5CF6"
+              extraProps={{ onApprove: () => onApprove(o.id), onDeliver: () => onDeliver(o.id) }} />)}
       </Section>
       <Section title="En Producción" count={enP.length} accent="#6D28D9">
         {enP.length === 0 ? <div style={S.emptyCard}>Sin pedidos en producción</div>
-          : enP.map(o => <OrderCard key={o.id} order={o} accentColor="#6D28D9" isAdmin={isAdmin}
-              onDetail={() => onDetail(o)}
-              onDeliver={() => onDeliver(o.id)}
-              onRevision={isAdmin ? () => onRevision(o.id) : null}
-              onDelete={isAdmin ? () => onDelete(o.id) : null} />)}
+          : enP.map((o, i) => <DraggableCard key={o.id} o={o} i={i} section="produccion" accentColor="#6D28D9"
+              extraProps={{ onDeliver: () => onDeliver(o.id) }} />)}
       </Section>
     </div>
   );
 }
 
 // ─── REVISION VIEW ────────────────────────────────────────────────────────────
-function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetail }) {
+function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetail, canEditOrders }) {
   return (
     <div>
       <h2 style={S.pageTitle}>Falta Revisión</h2>
@@ -1659,7 +2004,7 @@ function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetai
             {isAdmin && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0, marginLeft: 12 }}>
                 <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
-                <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onEdit(o)}>✏ Editar</button>
+                {canEditOrders && <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onEdit(o)}>✏ Editar</button>}
                 <button style={{ ...S.actionBtn, background: "#3B82F6", color: "#fff" }} onClick={() => onRestore(o.id)}>↩ Restaurar</button>
                 <button style={{ ...S.actionBtn, background: "#059669", color: "#fff" }} onClick={() => onMarkListo(o.id)}>✓ Marcar listo</button>
               </div>
