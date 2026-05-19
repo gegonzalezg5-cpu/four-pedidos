@@ -88,10 +88,16 @@ function addWorkdays(date, days) {
   return d;
 }
 function calcDeadlineFour(fe, ho, express) {
-  // Express: siempre 2 días hábiles. Normal: siempre 5 días hábiles.
-  return addWorkdays(new Date(`${fe}T${ho}`), express ? 2 : 5);
+  const hour = ho ? parseInt(ho.split(":")[0], 10) : 0;
+  const extraDay = hour >= 15 ? 1 : 0;
+  // Express: 2 días hábiles (+ 1 si después de las 15h). Normal: 5 días hábiles (+ 1 si después de las 15h).
+  return addWorkdays(new Date(`${fe}T${ho}`), (express ? 2 : 5) + extraDay);
 }
-function calcDeadlineSubDiseno(fe, ho) { return addWorkdays(new Date(`${fe}T${ho}`), 5); }
+function calcDeadlineSubDiseno(fe, ho) {
+  const hour = ho ? parseInt(ho.split(":")[0], 10) : 0;
+  const extraDay = hour >= 15 ? 1 : 0;
+  return addWorkdays(new Date(`${fe}T${ho}`), 2 + extraDay);
+}
 function calcDeadlineSubProduccion(at) { return addWorkdays(new Date(at), 20); }
 function fmtDate(d) { return new Date(d).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" }); }
 function fmtCurrency(v) { return "$" + Number(v || 0).toLocaleString("es-CL"); }
