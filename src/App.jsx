@@ -333,14 +333,37 @@ function FileUploadBlock({ files, onChange, label = "📎 Listado de números y 
 // ─── COLLAPSIBLE SECTION ──────────────────────────────────────────────────────
 function Section({ title, count, accent, children, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen);
+  const isNeon = title === "Pedidos Four" || title === "Pedidos Sublimados";
   return (
     <div style={{ marginBottom: 20 }}>
-      <button onClick={() => setOpen(!open)} style={{ ...S.sectionToggle, borderLeft: `3px solid ${accent}` }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontWeight: 800, fontSize: 12, color: "#111827", letterSpacing: "0.08em", textTransform: "uppercase" }}>{title}</span>
-          <span style={{ background: "#F3F4F6", color: "#6B7280", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6 }}>{count}</span>
+      <button onClick={() => setOpen(!open)} style={{
+        ...S.sectionToggle,
+        borderLeft: isNeon ? "none" : `3px solid ${accent}`,
+        background: isNeon ? "#111827" : "#fff",
+        borderColor: isNeon ? "#111827" : "#E5E7EB",
+        padding: isNeon ? "16px 22px" : "14px 18px",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{
+            fontWeight: 900,
+            fontSize: isNeon ? 16 : 12,
+            color: isNeon ? "#39FF14" : "#111827",
+            letterSpacing: isNeon ? "0.12em" : "0.08em",
+            textTransform: "uppercase",
+            fontFamily: isNeon ? "NikeFutura, Montserrat, sans-serif" : "inherit",
+            textShadow: isNeon ? "0 0 10px #39FF14, 0 0 20px #39FF1466" : "none",
+          }}>{title}</span>
+          <span style={{
+            background: isNeon ? "#39FF1422" : "#F3F4F6",
+            color: isNeon ? "#39FF14" : "#6B7280",
+            fontSize: isNeon ? 13 : 11,
+            fontWeight: 700,
+            padding: "3px 10px",
+            borderRadius: 6,
+            border: isNeon ? "1px solid #39FF1444" : "none",
+          }}>{count}</span>
         </div>
-        <span style={{ color: "#9CA3AF", fontSize: 14, transition: "transform .2s", display: "inline-block", transform: open ? "rotate(180deg)" : "rotate(0)" }}>▾</span>
+        <span style={{ color: isNeon ? "#39FF14" : "#9CA3AF", fontSize: 14, transition: "transform .2s", display: "inline-block", transform: open ? "rotate(180deg)" : "rotate(0)" }}>▾</span>
       </button>
       {open && <div style={{ marginTop: 2 }}>{children}</div>}
     </div>
@@ -358,7 +381,7 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDet
     <div style={{ ...S.orderCard, borderLeft: `3px solid ${urgent ? "#EF4444" : accentColor}` }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-          <span style={{ fontWeight: 800, fontSize: 15, color: "#111827", textTransform: "uppercase" }}>{order.cliente}</span>
+          <span style={{ fontWeight: 900, fontSize: 18, color: "#111827", textTransform: "uppercase", letterSpacing: "0.02em" }}>{order.cliente}</span>
           {isFour && order.express && <span style={S.chipExpress}>⚡ EXPRESS</span>}
           {!isFour && <span style={{ ...S.chip, background: order.stage === "diseno" ? "#FEE2E2" : "#FEF3C7", color: order.stage === "diseno" ? "#DC2626" : "#D97706" }}>{order.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN"}</span>}
           {order.listoAt && !order.deliveredAt && <span style={{ ...S.chip, background: "#DCFCE7", color: "#15803D" }}>✓ LISTO</span>}
@@ -371,7 +394,7 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDet
           <span>·</span><span style={{ fontWeight: 700, color: "#374151" }}>{fmtCurrency(order.valor)}</span>
           {order.notaVenta && <><span>·</span><span style={{ fontWeight: 700, color: "#9CA3AF" }}>NV #{order.notaVenta}</span></>}
         </div>
-        <div style={{ fontSize: 11, color: "#D1D5DB", marginTop: 3 }}>Ingresado: {fmtDate(order.createdAt)} {order.horaEnvio}</div>
+        <div style={{ fontSize: 13, color: "#6B7280", fontWeight: 600, marginTop: 5 }}>📅 {fmtDate(order.createdAt)} <span style={{ color: "#9CA3AF" }}>{order.horaEnvio}</span></div>
       </div>
       {/* Right: deadline + actions */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0, marginLeft: 12 }}>
@@ -1919,8 +1942,8 @@ function UsuariosView({ currentUser }) {
 const S = {
   app:  { minHeight: "100vh", background: "#F9FAFB", fontFamily: "Montserrat, sans-serif", color: "#111827" },
   header: { background: "#111827", borderBottom: "1px solid #1F2937", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 12px rgba(0,0,0,0.22)" },
-  headerInner: { width: "100%", padding: "0 40px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 68, gap: 20, boxSizing: "border-box" },
-  navBtn: { padding: "8px 18px", background: "transparent", color: "#6B7280", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 13, fontWeight: 700, letterSpacing: "0.08em", whiteSpace: "nowrap", fontFamily: "NikeFutura, Montserrat, sans-serif" },
+  headerInner: { width: "100%", padding: "0 40px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 80, gap: 20, boxSizing: "border-box" },
+  navBtn: { padding: "10px 20px", background: "transparent", color: "#6B7280", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 15, fontWeight: 700, letterSpacing: "0.08em", whiteSpace: "nowrap", fontFamily: "NikeFutura, Montserrat, sans-serif" },
   navBtnActive: { color: "#F9FAFB", background: "#1F2937" },
   main: { width: "100%", padding: "32px 40px 90px", boxSizing: "border-box" },
   pageTitle: { fontSize: 24, fontWeight: 900, color: "#111827", letterSpacing: "-0.01em", margin: "0 0 20px", fontFamily: "NikeFutura, Montserrat, sans-serif" },
