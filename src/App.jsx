@@ -1433,12 +1433,12 @@ function Dashboard({ data, allPending }) {
                 <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid #F3F4F6" }}>
                   <div style={{ width: 24, height: 24, borderRadius: "50%", background: i === 0 ? "#111827" : i === 1 ? "#374151" : "#F3F4F6", color: i < 2 ? "#fff" : "#9CA3AF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{i + 1}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.cliente}</div>
-                    <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{o.vendedor} · {fmtDate(o.createdAt)} {o.express ? "· ⚡Express" : ""}</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textTransform: "uppercase" }}>{o.cliente}</div>
+                    <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 600, marginTop: 2 }}>{o.vendedor} · {fmtDate(o.createdAt)} {o.express ? "· ⚡Express" : ""}</div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
                     {dl && <div style={{ fontSize: 11, fontWeight: 800, color: isUrgent ? "#DC2626" : "#059669" }}>{days === 0 ? "HOY" : days < 0 ? "VENCIDO" : `${days}d`}</div>}
-                    <div style={{ fontSize: 10, color: "#D1D5DB", marginTop: 1 }}>{fmtCurrency(o.valor)}</div>
+                    <div style={{ fontSize: 11, color: "#374151", fontWeight: 700, marginTop: 1 }}>{fmtCurrency(o.valor)}</div>
                   </div>
                 </div>
               );
@@ -1468,12 +1468,12 @@ function Dashboard({ data, allPending }) {
                 <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid #F3F4F6" }}>
                   <div style={{ width: 24, height: 24, borderRadius: "50%", background: i === 0 ? "#7C3AED" : i === 1 ? "#A78BFA" : "#F5F3FF", color: i < 2 ? "#fff" : "#9CA3AF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>{i + 1}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.cliente}</div>
-                    <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{o.vendedor} · {fmtDate(o.createdAt)} · <span style={{ color: o.stage === "diseno" ? "#7C3AED" : "#6D28D9" }}>{o.stage === "diseno" ? "Diseño" : "Producción"}</span></div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textTransform: "uppercase" }}>{o.cliente}</div>
+                    <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 600, marginTop: 2 }}>{o.vendedor} · {fmtDate(o.createdAt)} · <span style={{ color: o.stage === "diseno" ? "#7C3AED" : "#6D28D9" }}>{o.stage === "diseno" ? "Diseño" : "Producción"}</span></div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
                     {dl && <div style={{ fontSize: 11, fontWeight: 800, color: isUrgent ? "#DC2626" : "#7C3AED" }}>{days === 0 ? "HOY" : days < 0 ? "VENCIDO" : `${days}d`}</div>}
-                    <div style={{ fontSize: 10, color: "#D1D5DB", marginTop: 1 }}>{fmtCurrency(o.valor)}</div>
+                    <div style={{ fontSize: 11, color: "#374151", fontWeight: 700, marginTop: 1 }}>{fmtCurrency(o.valor)}</div>
                   </div>
                 </div>
               );
@@ -1510,8 +1510,8 @@ function Dashboard({ data, allPending }) {
               return (
                 <div key={o.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F3F4F6" }}>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{o.cliente}</div>
-                    <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{o.vendedor} · {o.type === "four" ? (o.express ? "⚡Express" : "Four") : `Sub·${o.stage === "diseno" ? "Diseño" : "Prod"}`}</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: "#111827", textTransform: "uppercase" }}>{o.cliente}</div>
+                    <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 600, marginTop: 2 }}>{o.vendedor} · {o.type === "four" ? (o.express ? "⚡Express" : "Four") : `Sub·${o.stage === "diseno" ? "Diseño" : "Prod"}`}</div>
                   </div>
                   <DeadlineBadge dl={dl} />
                 </div>
