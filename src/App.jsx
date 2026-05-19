@@ -1022,7 +1022,7 @@ export default function App() {
   const allPending = [...data.four, ...data.sub];
   const revisionCount = (data.revision || []).length;
   const listoCount = (data.listo || []).length;
-  const pedidosViews = ["todos","four","sub","pedidos_dia"];
+  const pedidosViews = ["todos","four","sub"];
   const isPedidosActive = pedidosViews.includes(view);
   const listoViews = ["listo_pendiente","listo_entregado"];
   const isListoActive = listoViews.includes(view);
@@ -1043,25 +1043,6 @@ export default function App() {
               style={{ ...S.navBtn, ...(view === "dashboard" ? S.navBtnActive : {}) }}>
               DASHBOARD
             </button>
-
-            {/* Pedidos del Día */}
-            {(() => {
-              const hoy = new Date(); hoy.setHours(0,0,0,0);
-              const manana = new Date(hoy); manana.setDate(hoy.getDate() + 1);
-              const diaFour = [...data.four, ...(data.revision||[]).filter(o=>o.type==="four")]
-                .filter(o => { const dl = o.deadline; if (!dl) return false; const d = new Date(dl); return d < manana; })
-                .length;
-              const diaSub = [...data.sub, ...(data.revision||[]).filter(o=>o.type==="sub")]
-                .filter(o => { const dl = o.stage==="produccion" ? o.deadlineProduccion : o.deadlineDiseno; if (!dl) return false; const d = new Date(dl); return d < manana; })
-                .slice(0,1).length;
-              const diaCount = diaFour + diaSub;
-              return (
-                <button onClick={() => setView("pedidos_dia")}
-                  style={{ ...S.navBtn, ...(view === "pedidos_dia" ? S.navBtnActive : {}), ...(diaCount > 0 ? { color: "#EF4444" } : {}) }}>
-                  🔥 HOY {diaCount > 0 ? `(${diaCount})` : ""}
-                </button>
-              );
-            })()}
 
             {/* Pedidos dropdown */}
             <div ref={pedidosRef} style={{ position: "relative" }}>
@@ -1179,7 +1160,6 @@ export default function App() {
           ) : null;
         })()}
         {view === "dashboard"  && <Dashboard data={data} allPending={allPending} />}
-        {view === "pedidos_dia" && <PedidosDiaView orders={allPending} onDetail={o => setDetailOrder(o)} onDeliver={(id, t) => setConfirm({ type: t, id, action: "deliver" })} onRevision={(id, t) => setConfirm({ type: t, id, action: "revision" })} isAdmin={isAdmin} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} />}
         {view === "todos"      && <TodosView orders={allPending} isAdmin={isAdmin} onDeliver={(id, t) => setConfirm({ type: t, id, action: "deliver" })} onApprove={id => setConfirm({ type: "sub", id, action: "approve" })} onRevision={(id, t) => setConfirm({ type: t, id, action: "revision" })} onDetail={o => setDetailOrder(o)} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} />}
         {view === "four"       && <FourView  orders={data.four}  isAdmin={isAdmin} onDeliver={id => setConfirm({ type: "four", id, action: "deliver" })} onRevision={id => setConfirm({ type: "four", id, action: "revision" })} onDetail={o => setDetailOrder(o)} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} />}
         {view === "sub"        && <SubView   orders={data.sub}   isAdmin={isAdmin} onApprove={id => setConfirm({ type: "sub", id, action: "approve" })} onDeliver={id => setConfirm({ type: "sub", id, action: "deliver" })} onRevision={id => setConfirm({ type: "sub", id, action: "revision" })} onDetail={o => setDetailOrder(o)} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} />}
@@ -1546,120 +1526,6 @@ function Dashboard({ data, allPending }) {
           }
         </div>
       </div>
-    </div>
-  );
-}
-
-// ─── PEDIDOS DEL DÍA VIEW ────────────────────────────────────────────────────
-function PedidosDiaView({ orders, onDetail, onDeliver, onRevision, onDelete, isAdmin }) {
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-  const manana = new Date(hoy); manana.setDate(hoy.getDate() + 1);
-
-  // Four: todos los vencidos o que vencen hoy, ordenados de más urgente (más vencido) a menos
-  const fourDia = orders
-    .filter(o => o.type === "four")
-    .filter(o => { const dl = o.deadline; if (!dl) return false; return new Date(dl) < manana; })
-    .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
-    .slice(0, 10);
-
-  // Sub: solo el MÁS urgente (1 pedido)
-  const subDia = orders
-    .filter(o => o.type === "sub")
-    .filter(o => {
-      const dl = o.stage === "produccion" ? o.deadlineProduccion : o.deadlineDiseno;
-      if (!dl) return false;
-      return new Date(dl) < manana;
-    })
-    .sort((a, b) => {
-      const da = a.stage === "produccion" ? a.deadlineProduccion : a.deadlineDiseno;
-      const db = b.stage === "produccion" ? b.deadlineProduccion : b.deadlineDiseno;
-      return new Date(da) - new Date(db);
-    })
-    .slice(0, 1);
-
-  const total = fourDia.length + subDia.length;
-
-  const NeonDivider = ({ label }) => (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#111827", borderRadius: 10, padding: "16px 22px", marginBottom: 8, marginTop: 4 }}>
-      <span style={{ fontFamily: "NikeFutura, Montserrat, sans-serif", fontSize: 16, fontWeight: 900, color: "#39FF14", letterSpacing: "0.12em", textTransform: "uppercase", textShadow: "0 0 10px #39FF14, 0 0 20px #39FF1466" }}>{label}</span>
-    </div>
-  );
-
-  const DiaCard = ({ o, rank }) => {
-    const isFour = o.type === "four";
-    const dl = isFour ? o.deadline : (o.stage === "produccion" ? o.deadlineProduccion : o.deadlineDiseno);
-    const days = dl ? dLeft(dl) : null;
-    const isVencido = days !== null && days < 0;
-    const isHoy = days === 0;
-    return (
-      <div style={{ ...S.orderCard, borderLeft: `4px solid ${isVencido ? "#DC2626" : "#F59E0B"}`, background: isVencido ? "#FFF5F5" : "#FFFBEB" }}>
-        <div style={{ width: 32, height: 32, borderRadius: "50%", background: isVencido ? "#DC2626" : "#F59E0B", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 900, flexShrink: 0 }}>{rank}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5, flexWrap: "wrap" }}>
-            <span style={{ fontWeight: 900, fontSize: 17, color: "#111827", textTransform: "uppercase" }}>{o.cliente}</span>
-            {isFour && o.express && <span style={S.chipExpress}>⚡ EXPRESS</span>}
-            {!isFour && <span style={{ ...S.chip, background: o.stage === "diseno" ? "#FEE2E2" : "#FEF3C7", color: o.stage === "diseno" ? "#DC2626" : "#D97706" }}>{o.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN"}</span>}
-            <span style={{ ...S.chip, background: isVencido ? "#FEE2E2" : "#FEF3C7", color: isVencido ? "#DC2626" : "#D97706", fontWeight: 800 }}>
-              {isVencido ? `VENCIDO ${Math.abs(days)}d` : "HOY"}
-            </span>
-          </div>
-          <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexWrap: "wrap", marginBottom: 4 }}>
-            <span style={{ fontWeight: 800, color: "#374151" }}>{o.vendedor}</span>
-            <span>·</span><span>{o.deporte}</span>
-            <span>·</span><span>{o.cantidad} prendas</span>
-            <span>·</span><span style={{ fontWeight: 700, color: "#374151" }}>{fmtCurrency(o.valor)}</span>
-            {o.notaVenta && <><span>·</span><span style={{ fontWeight: 700, color: "#9CA3AF" }}>NV #{o.notaVenta}</span></>}
-          </div>
-          <div style={{ fontSize: 13, color: "#6B7280", fontWeight: 600, marginTop: 3 }}>📅 Entrega: {fmtDate(dl)}</div>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0, marginLeft: 12 }}>
-          <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
-          {isAdmin && <button style={{ ...S.actionBtn, background: "#059669", color: "#fff" }} onClick={() => onDeliver(o.id, o.type)}>✓ Marcar listo</button>}
-          {isAdmin && <button style={{ ...S.actionBtn, background: "#F59E0B", color: "#fff" }} onClick={() => onRevision(o.id, o.type)}>⚠ Revisión</button>}
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <h2 style={{ ...S.pageTitle, margin: 0 }}>Pedidos del Día</h2>
-          <p style={{ fontSize: 13, color: "#9CA3AF", margin: "4px 0 0", fontFamily: "Montserrat, sans-serif" }}>
-            Pedidos vencidos y con entrega para hoy, ordenados de más a menos urgente.
-          </p>
-        </div>
-        {total === 0 && <span style={{ background: "#DCFCE7", color: "#15803D", fontSize: 13, fontWeight: 700, padding: "6px 16px", borderRadius: 8 }}>✓ Sin urgencias hoy</span>}
-      </div>
-
-      {total === 0 ? (
-        <div style={S.emptyCard}>No hay pedidos vencidos ni con entrega para hoy 🎉</div>
-      ) : (
-        <>
-          <NeonDivider label={`Pedidos Four · ${fourDia.length}`} />
-          {fourDia.length === 0
-            ? <div style={{ ...S.emptyCard, marginBottom: 16 }}>Sin pedidos Four urgentes hoy</div>
-            : fourDia.map((o, i) => <DiaCard key={o.id} o={o} rank={i + 1} />)
-          }
-
-          <div style={{ marginTop: 16 }}>
-            <NeonDivider label={`Sublimado · ${subDia.length} (máx. 1)`} />
-            {subDia.length === 0
-              ? <div style={{ ...S.emptyCard, marginBottom: 16 }}>Sin sublimados urgentes hoy</div>
-              : subDia.map((o, i) => <DiaCard key={o.id} o={o} rank={1} />)
-            }
-            {subDia.length === 0 && orders.filter(o => o.type === "sub").filter(o => {
-              const dl = o.stage === "produccion" ? o.deadlineProduccion : o.deadlineDiseno;
-              return dl && new Date(dl) >= manana;
-            }).length > 0 && (
-              <div style={{ fontSize: 12, color: "#9CA3AF", padding: "8px 16px", fontStyle: "italic" }}>
-                Solo se puede entregar 1 sublimado por día. El siguiente en cola está pendiente.
-              </div>
-            )}
-          </div>
-        </>
-      )}
     </div>
   );
 }
