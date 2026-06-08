@@ -30,6 +30,7 @@ const LOGO_IMG = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1B
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const SELLERS = ["Angelica Gonzalez","Diego Gonzalez","Enrique Diaz","Genaro Gonzalez","Lucía Rampinelli","Miguel Gonzalez","Patricio Mansilla","Paulo Riquelme","Ricardo Parrague"];
 const SPORTS  = ["Fútbol","Basketball","Volleyball","Atletismo","Natación","Tenis","Rugby","Otro"];
+const ESTAMPADORES = ["Rodrigo","Amanda","David"];
 // Legacy fallback key (used if Supabase is unavailable)
 const STORAGE_KEY = "foursport_v6";
 const USERS_KEY   = "foursport_users_v1";
@@ -79,6 +80,37 @@ function loadUsers() {
 }
 function saveUsers(users) {
   try { localStorage.setItem(USERS_KEY, JSON.stringify(users)); } catch {}
+}
+
+// ─── NOTIFICATION HELPERS ─────────────────────────────────────────────────────
+async function createNotification({ para, tipo, titulo, mensaje, pedidoId }) {
+  try {
+    const { error } = await supabase.from("notificaciones").insert({
+      para, tipo, titulo, mensaje: mensaje || null, pedido_id: pedidoId || null,
+    });
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.warn("Notification create failed:", e);
+    return false;
+  }
+}
+async function loadNotifications(name) {
+  try {
+    const { data, error } = await supabase.from("notificaciones")
+      .select("*").eq("para", name).order("created_at", { ascending: false }).limit(50);
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.warn("Notifications load failed:", e);
+    return [];
+  }
+}
+async function markNotificationRead(id) {
+  try { await supabase.from("notificaciones").update({ leida: true }).eq("id", id); } catch {}
+}
+async function markAllNotificationsRead(name) {
+  try { await supabase.from("notificaciones").update({ leida: true }).eq("para", name).eq("leida", false); } catch {}
 }
 
 // ─── DATE HELPERS ─────────────────────────────────────────────────────────────
@@ -154,6 +186,9 @@ function rowToOrder(row) {
     filesNota:         row.files_nota || [],
     editedAt:          row.edited_at,
     sortOrder:         row.sort_order || 0,
+    cantidadEstampados: row.cantidad_estampados,
+    estampador:        row.estampador,
+    filesMaqueta:      row.files_maqueta || [],
   };
 }
 
@@ -189,6 +224,9 @@ function orderToRow(o) {
     files_nota:          o.filesNota || [],
     edited_at:           o.editedAt || null,
     sort_order:          o.sortOrder || 0,
+    cantidad_estampados: o.cantidadEstampados || null,
+    estampador:          o.estampador || null,
+    files_maqueta:       o.filesMaqueta || [],
   };
 }
 
@@ -455,6 +493,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
       vendedor:  order.vendedor  || SELLERS[0],
       deporte:   order.deporte   || SPORTS[0],
       cantidad:  order.cantidad  || "",
+      cantidadEstampados: order.cantidadEstampados || "",
       valor:     order.valor     || "",
       notas:     order.notas     || "",
       express:   order.express   || false,
@@ -466,7 +505,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
   const saveInfo = async () => {
     setSaving(true);
     // Recalculate deadline if type or express changed (keep original fechaEnvio/horaEnvio)
-    let patches = { ...editForm, cantidad: +editForm.cantidad, valor: +editForm.valor };
+    let patches = { ...editForm, cantidad: +editForm.cantidad, valor: +editForm.valor, cantidadEstampados: editForm.cantidadEstampados ? +editForm.cantidadEstampados : null };
     if (editForm.type === "four") {
       patches.deadline = calcDeadlineFour(order.fechaEnvio, order.horaEnvio, editForm.express).toISOString();
       patches.stage = null;
@@ -483,6 +522,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
       vendedor:   patches.vendedor,
       deporte:    patches.deporte,
       cantidad:   patches.cantidad,
+      cantidad_estampados: patches.cantidadEstampados,
       valor:      patches.valor,
       notas:      patches.notas || null,
       express:    patches.express || false,
@@ -588,15 +628,25 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
             <Row label="Vendedor" value={order.vendedor} />
             <Row label="Deporte" value={order.deporte} />
             <Row label="Cantidad" value={`${order.cantidad} prendas`} />
+            {isFour && <Row label="Estampados (con número)" value={order.cantidadEstampados ? `${order.cantidadEstampados}` : null} />}
             <Row label="Valor" value={fmtCurrency(order.valor)} bold />
             <Row label="N° Nota de Venta" value={order.notaVenta ? `#${order.notaVenta}` : null} bold />
             <Row label="Tipo de entrega" value={isFour ? (order.express ? "⚡ Express (2 días hábiles)" : "📦 Normal (5 días hábiles)") : null} />
             <Row label="Fecha ingreso" value={`${fmtDate(order.createdAt)} ${order.horaEnvio || ""}`} />
             {dl && <Row label="Fecha entrega" value={fmtDate(dl)} bold />}
-            {order.approvedAt && <Row label="Diseño aprobado" value={fmtDate(order.approvedAt)} />}
+            {order.approvedAt && <Row label="Fecha aprobado el diseño" value={fmtDate(order.approvedAt)} bold />}
             {order.listoAt && <Row label="Marcado listo" value={fmtDate(order.listoAt)} />}
+            {order.estampador && <Row label="Estampador" value={order.estampador} bold />}
             {order.deliveredAt && <Row label="Entregado" value={`${fmtDate(order.deliveredAt)} · por ${order.despachador}`} />}
           </div>
+
+          {/* Notas del vendedor */}
+          {order.notas && (
+            <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
+              <div style={{ fontSize: 10, fontWeight: 800, color: "#6B7280", letterSpacing: "0.08em", marginBottom: 6 }}>📝 NOTAS / COMENTARIOS</div>
+              <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{order.notas}</div>
+            </div>
+          )}
 
           {/* Revision */}
           {order.revisionRazon && (
@@ -633,9 +683,15 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
                   </select>
                 </div>
                 <div>
-                  <label style={S.label}>Cantidad</label>
+                  <label style={S.label}>Cantidad de prendas</label>
                   <input style={{ ...S.input, marginTop: 5 }} type="number" min="1" value={editForm.cantidad} onChange={e => setEditForm({...editForm, cantidad: e.target.value})} />
                 </div>
+                {editForm.type === "four" && (
+                  <div>
+                    <label style={S.label}>Cantidad de estampados</label>
+                    <input style={{ ...S.input, marginTop: 5 }} type="number" min="0" value={editForm.cantidadEstampados} onChange={e => setEditForm({...editForm, cantidadEstampados: e.target.value})} />
+                  </div>
+                )}
                 <div>
                   <label style={S.label}>Valor ($)</label>
                   <input style={{ ...S.input, marginTop: 5 }} type="number" min="0" value={editForm.valor} onChange={e => setEditForm({...editForm, valor: e.target.value})} />
@@ -690,6 +746,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
           {!editingFiles ? (
             <>
               <FileList files={order.files} label="📎 Logos y números" color="#3B82F6" bg="#EFF6FF" />
+              <FileList files={order.filesMaqueta} label="🎨 Maquetas digitales" color="#7C3AED" bg="#F5F3FF" />
               <FileList files={order.filesNota} label="📄 Nota de venta" color="#F59E0B" bg="#FFFBEB" />
               {(!order.files?.length && !order.filesNota?.length) && (
                 <div style={{ textAlign: "center", padding: "24px", color: "#D1D5DB", fontSize: 13, background: "#F9FAFB", borderRadius: 10 }}>
@@ -725,7 +782,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
 // ─── NEW ORDER MODAL ──────────────────────────────────────────────────────────
 const todayStr = new Date().toISOString().split("T")[0];
 const nowStr   = new Date().toTimeString().slice(0, 5);
-const baseForm = { cliente: "", notaVenta: "", vendedor: SELLERS[0], deporte: SPORTS[0], cantidad: "", valor: "", notas: "", files: [], filesNota: [], fechaEnvio: todayStr, horaEnvio: nowStr, express: false };
+const baseForm = { cliente: "", notaVenta: "", vendedor: SELLERS[0], deporte: SPORTS[0], cantidad: "", cantidadEstampados: "", valor: "", notas: "", files: [], filesNota: [], filesMaqueta: [], fechaEnvio: todayStr, horaEnvio: nowStr, express: false };
 
 function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, editOrder = null }) {
   const [tipo, setTipo]     = useState(editOrder?.type || null);
@@ -735,10 +792,12 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
     vendedor:   editOrder.vendedor   || SELLERS[0],
     deporte:    editOrder.deporte    || SPORTS[0],
     cantidad:   editOrder.cantidad   || "",
+    cantidadEstampados: editOrder.cantidadEstampados || "",
     valor:      editOrder.valor      || "",
     notas:      editOrder.notas      || "",
     files:      editOrder.files      || [],
     filesNota:  editOrder.filesNota  || [],
+    filesMaqueta: editOrder.filesMaqueta || [],
     fechaEnvio: editOrder.fechaEnvio || todayStr,
     horaEnvio:  editOrder.horaEnvio  || nowStr,
     express:    editOrder.express    || false,
@@ -751,8 +810,20 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
   const subPrev  = tipo === "sub"  && form.fechaEnvio ? calcDeadlineSubDiseno(form.fechaEnvio, form.horaEnvio) : null;
   const canSubmit = tipo && form.cliente && form.notaVenta && form.cantidad && form.valor;
 
+  const [dateError, setDateError] = useState("");
+
   const submit = () => {
     if (!canSubmit) return;
+    // Validar que la fecha/hora no sea anterior a la actual (excepto admin)
+    if (isAdmin && !isEdit) {
+      const selected = new Date(`${form.fechaEnvio}T${form.horaEnvio}`);
+      const now = new Date();
+      if (selected < now) {
+        setDateError("No puedes ingresar un pedido con fecha u hora anterior a la actual.");
+        return;
+      }
+    }
+    setDateError("");
     if (isEdit) {
       onEditRevision(editOrder.id, { ...form, type: tipo, cantidad: +form.cantidad, valor: +form.valor });
     } else {
@@ -803,6 +874,7 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
                   </select>
                 </Field>
                 <Field label="Cantidad de prendas *"><input style={S.input} type="number" min="1" value={form.cantidad} placeholder="Ej: 15" onChange={e => setForm({ ...form, cantidad: e.target.value })} /></Field>
+                {tipo === "four" && <Field label="Cantidad de estampados (con número)"><input style={S.input} type="number" min="0" value={form.cantidadEstampados} placeholder="Ej: 30" onChange={e => setForm({ ...form, cantidadEstampados: e.target.value })} /></Field>}
                 <Field label="Valor del pedido ($) *"><input style={S.input} type="number" min="0" value={form.valor} placeholder="Ej: 250000" onChange={e => setForm({ ...form, valor: e.target.value })} /></Field>
 
                 {/* Fecha y hora: admin puede editar, vendedor ve solo lectura */}
@@ -826,7 +898,19 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
                   </Field>
                 )}
               </div>
+              {/* Notas del vendedor */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={S.label}>📝 Notas / Comentarios</label>
+                <textarea style={{ ...S.input, marginTop: 5, height: 80, resize: "vertical" }} value={form.notas} placeholder="Escribe aquí cualquier detalle, instrucción especial o comentario sobre el pedido..." onChange={e => setForm({ ...form, notas: e.target.value })} />
+              </div>
               <FileUploadBlock files={form.files} onChange={f => setForm({ ...form, files: f })} />
+              <FileUploadBlock
+                label="🎨 Maquetas digitales"
+                hint="Adjunta las maquetas o diseños digitales"
+                files={form.filesMaqueta}
+                onChange={f => setForm({ ...form, filesMaqueta: f })}
+                accent="#7C3AED"
+              />
               <FileUploadBlock
                 label="📄 Nota de venta"
                 hint="Adjunta el PDF o imagen de la nota de venta"
@@ -853,6 +937,7 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
         </div>
         <div style={S.bigModalFooter}>
           <button style={S.btnGhost} onClick={onClose}>Cancelar</button>
+          {dateError && <span style={{ color: "#DC2626", fontSize: 12, fontWeight: 600, marginRight: 12, alignSelf: "center" }}>{dateError}</span>}
           <button style={!canSubmit || saving ? S.btnDisabled : { ...S.btnPrimary, background: tipo === "sub" ? "#7C3AED" : "#111827" }}
             onClick={submit} disabled={!canSubmit || saving}>
             {saving ? "Guardando…" : isEdit ? "GUARDAR CAMBIOS →" : "INGRESAR PEDIDO →"}
@@ -960,8 +1045,12 @@ export default function App() {
   const [confirm, setConfirm]         = useState(null);
   const [pedidosOpen, setPedidosOpen] = useState(false);
   const [listoOpen, setListoOpen]     = useState(false);
+  const [notifs, setNotifs]           = useState([]);
+  const [notifsOpen, setNotifsOpen]   = useState(false);
+  const [search, setSearch]           = useState("");
   const pedidosRef                    = useRef(null);
   const listoRef                      = useRef(null);
+  const notifsRef                     = useRef(null);
 
   useEffect(() => {
     try {
@@ -997,6 +1086,25 @@ export default function App() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  useEffect(() => {
+    const handler = e => { if (notifsRef.current && !notifsRef.current.contains(e.target)) setNotifsOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Load notifications for current user + realtime
+  useEffect(() => {
+    if (!user?.name) return;
+    loadNotifications(user.name).then(setNotifs);
+    const ch = supabase
+      .channel("notif-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "notificaciones" }, () => {
+        loadNotifications(user.name).then(setNotifs);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user?.name]);
 
   const handleLogin = (u) => {
     setUser(u);
@@ -1037,11 +1145,11 @@ export default function App() {
     persist({ ...data, sub: data.sub.map(o => o.id === id ? patched : o) }, [patched]);
     setConfirm(null);
   };
-  const markDelivered = (id, type) => {
+  const markDelivered = (id, type, estampador = null) => {
     const list = type === "four" ? data.four : type === "sub" ? data.sub : (data.revision || []);
     const order = list.find(o => o.id === id);
     if (!order) return;
-    const updated = { ...order, listoAt: new Date().toISOString(), status: "listo" };
+    const updated = { ...order, listoAt: new Date().toISOString(), status: "listo", estampador: estampador || order.estampador || null };
     const newData = {
       ...data,
       four: data.four.filter(o => o.id !== id),
@@ -1074,6 +1182,14 @@ export default function App() {
       sub:  data.sub.filter(o => o.id !== id),
       revision: [updated, ...(data.revision || [])],
     }, [updated]);
+    // Notificar al vendedor a cargo
+    createNotification({
+      para: order.vendedor,
+      tipo: "revision",
+      titulo: `Pedido en revisión: ${order.cliente}`,
+      mensaje: razon.trim() || "Tu pedido requiere revisión. Contacta al diseñador.",
+      pedidoId: order.id,
+    });
     setConfirm(null);
   };
   const restoreFromRevision = id => {
@@ -1160,7 +1276,7 @@ export default function App() {
   const allPending = [...data.four, ...data.sub];
   const revisionCount = (data.revision || []).length;
   const listoCount = (data.listo || []).length;
-  const pedidosViews = ["todos","four","sub","pedidos_dia"];
+  const pedidosViews = ["todos","four","sub"];
   const isPedidosActive = pedidosViews.includes(view);
   const listoViews = ["listo_pendiente","listo_entregado"];
   const isListoActive = listoViews.includes(view);
@@ -1181,25 +1297,6 @@ export default function App() {
               style={{ ...S.navBtn, ...(view === "dashboard" ? S.navBtnActive : {}) }}>
               DASHBOARD
             </button>
-
-            {/* Pedidos del Día */}
-            {(() => {
-              const hoy = new Date(); hoy.setHours(0,0,0,0);
-              const manana = new Date(hoy); manana.setDate(hoy.getDate() + 1);
-              const diaFour = [...data.four, ...(data.revision||[]).filter(o=>o.type==="four")]
-                .filter(o => { const dl = o.deadline; if (!dl) return false; const d = new Date(dl); return d < manana; })
-                .length;
-              const diaSub = [...data.sub, ...(data.revision||[]).filter(o=>o.type==="sub")]
-                .filter(o => { const dl = o.stage==="produccion" ? o.deadlineProduccion : o.deadlineDiseno; if (!dl) return false; const d = new Date(dl); return d < manana; })
-                .slice(0,1).length;
-              const diaCount = diaFour + diaSub;
-              return (
-                <button onClick={() => setView("pedidos_dia")}
-                  style={{ ...S.navBtn, ...(view === "pedidos_dia" ? S.navBtnActive : {}), ...(diaCount > 0 ? { color: "#EF4444" } : {}) }}>
-                  🔥 HOY {diaCount > 0 ? `(${diaCount})` : ""}
-                </button>
-              );
-            })()}
 
             {/* Pedidos dropdown */}
             <div ref={pedidosRef} style={{ position: "relative" }}>
@@ -1280,8 +1377,41 @@ export default function App() {
             ) : null}
           </nav>
 
-          {/* User */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          {/* User + Notifs */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+            {/* Campana de notificaciones */}
+            <div ref={notifsRef} style={{ position: "relative" }}>
+              <button onClick={() => {
+                setNotifsOpen(o => !o);
+                if (!notifsOpen && notifs.some(n => !n.leida)) {
+                  markAllNotificationsRead(user.name).then(() => loadNotifications(user.name).then(setNotifs));
+                }
+              }} style={{ position: "relative", background: "none", border: "none", cursor: "pointer", fontSize: 20, padding: 4, lineHeight: 1 }}>
+                🔔
+                {notifs.filter(n => !n.leida).length > 0 && (
+                  <span style={{ position: "absolute", top: 0, right: 0, background: "#EF4444", color: "#fff", fontSize: 9, fontWeight: 800, minWidth: 16, height: 16, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>
+                    {notifs.filter(n => !n.leida).length}
+                  </span>
+                )}
+              </button>
+              {notifsOpen && (
+                <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, width: 340, maxHeight: 420, overflowY: "auto", zIndex: 300, boxShadow: "0 12px 32px rgba(0,0,0,0.18)" }}>
+                  <div style={{ padding: "14px 16px", borderBottom: "1px solid #F3F4F6", fontWeight: 800, fontSize: 13, color: "#111827", fontFamily: "NikeFutura, Montserrat, sans-serif", letterSpacing: "0.06em" }}>NOTIFICACIONES</div>
+                  {notifs.length === 0 ? (
+                    <div style={{ padding: "32px 16px", textAlign: "center", color: "#D1D5DB", fontSize: 13 }}>Sin notificaciones</div>
+                  ) : notifs.map(n => (
+                    <div key={n.id} style={{ padding: "12px 16px", borderBottom: "1px solid #F3F4F6", background: n.leida ? "#fff" : "#FFFBEB" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                        {n.tipo === "revision" && <span style={{ fontSize: 14 }}>⚠️</span>}
+                        <span style={{ fontSize: 13, fontWeight: 800, color: "#111827" }}>{n.titulo}</span>
+                      </div>
+                      {n.mensaje && <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.5, marginBottom: 4 }}>{n.mensaje}</div>}
+                      <div style={{ fontSize: 10, color: "#9CA3AF" }}>{new Date(n.created_at).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>{user.name}</span>
             <button onClick={handleLogout} style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontFamily: "Montserrat, sans-serif", fontWeight: 600 }}>Salir</button>
           </div>
@@ -1289,6 +1419,82 @@ export default function App() {
       </header>
 
       <main style={S.main}>
+        {/* ── Barra de búsqueda ── */}
+        <div style={{ marginBottom: 24, position: "relative" }}>
+          <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+            <span style={{ position: "absolute", left: 18, fontSize: 18, opacity: 0.5, pointerEvents: "none" }}>🔍</span>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="¿Qué pedido quieres buscar?"
+              style={{
+                width: "100%", boxSizing: "border-box",
+                padding: "16px 18px 16px 50px",
+                borderRadius: 16,
+                border: "1px solid #E5E7EB",
+                background: "linear-gradient(180deg, #FFFFFF 0%, #FAFAFA 100%)",
+                fontSize: 15, color: "#111827", outline: "none",
+                fontFamily: "Montserrat, sans-serif",
+                boxShadow: search ? "0 0 0 3px rgba(57,255,20,0.12), 0 4px 16px rgba(0,0,0,0.06)" : "0 2px 10px rgba(0,0,0,0.04)",
+                transition: "box-shadow 0.2s",
+              }}
+            />
+            {search && (
+              <button onClick={() => setSearch("")} style={{ position: "absolute", right: 16, background: "#F3F4F6", border: "none", borderRadius: "50%", width: 26, height: 26, cursor: "pointer", color: "#6B7280", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+            )}
+          </div>
+
+          {/* Resultados de búsqueda */}
+          {search.trim() && (() => {
+            const q = search.toLowerCase().trim();
+            const allOrders = [...data.four, ...data.sub, ...(data.revision || []), ...(data.listo || []), ...(data.delivered || [])];
+            const results = allOrders.filter(o =>
+              (o.cliente || "").toLowerCase().includes(q) ||
+              (o.notaVenta || "").toLowerCase().includes(q) ||
+              (o.vendedor || "").toLowerCase().includes(q) ||
+              (o.deporte || "").toLowerCase().includes(q)
+            );
+            const statusLabel = o => {
+              if (o.status === "delivered") return { t: "ENTREGADO", bg: "#F3F4F6", c: "#374151" };
+              if (o.status === "listo") return { t: "LISTO", bg: "#DCFCE7", c: "#15803D" };
+              if (o.status === "revision") return { t: "REVISIÓN", bg: "#FEF3C7", c: "#D97706" };
+              return o.type === "four" ? { t: "FOUR", bg: "#EFF6FF", c: "#3B82F6" } : { t: "SUBLIMADO", bg: o.stage === "diseno" ? "#FEE2E2" : "#FEF3C7", c: o.stage === "diseno" ? "#DC2626" : "#D97706" };
+            };
+            return (
+              <div style={{ marginTop: 12, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 16, overflow: "hidden", boxShadow: "0 8px 28px rgba(0,0,0,0.08)" }}>
+                <div style={{ padding: "12px 18px", borderBottom: "1px solid #F3F4F6", fontSize: 11, fontWeight: 700, color: "#9CA3AF", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  {results.length} resultado{results.length !== 1 ? "s" : ""}
+                </div>
+                {results.length === 0 ? (
+                  <div style={{ padding: "32px", textAlign: "center", color: "#D1D5DB", fontSize: 14 }}>No se encontraron pedidos</div>
+                ) : results.slice(0, 20).map(o => {
+                  const sl = statusLabel(o);
+                  return (
+                    <div key={o.id} onClick={() => { setDetailOrder(o); setSearch(""); }}
+                      style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 18px", borderBottom: "1px solid #F3F4F6", cursor: "pointer" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "#FAFAFA"}
+                      onMouseLeave={e => e.currentTarget.style.background = "#fff"}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontWeight: 800, fontSize: 14, color: "#111827", textTransform: "uppercase" }}>{o.cliente}</span>
+                          <span style={{ fontSize: 9, fontWeight: 800, padding: "2px 8px", borderRadius: 5, background: sl.bg, color: sl.c, letterSpacing: "0.04em" }}>{sl.t}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>
+                          <span style={{ fontWeight: 700 }}>{o.vendedor}</span> · {o.deporte} · {o.cantidad} prendas · {fmtCurrency(o.valor)}{o.notaVenta ? ` · NV #${o.notaVenta}` : ""}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 18, opacity: 0.3 }}>›</span>
+                    </div>
+                  );
+                })}
+                {results.length > 20 && (
+                  <div style={{ padding: "10px 18px", fontSize: 12, color: "#9CA3AF", textAlign: "center" }}>Mostrando los primeros 20 de {results.length}. Afina tu búsqueda.</div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+
         {/* Alerta para vendedores con pedidos en revisión */}
         {!isAdmin && (() => {
           const myRevision = (data.revision || []).filter(o => o.vendedor === user.name);
@@ -1317,7 +1523,6 @@ export default function App() {
           ) : null;
         })()}
         {view === "dashboard"  && <Dashboard data={data} allPending={allPending} />}
-        {view === "pedidos_dia" && <PedidosDiaView orders={allPending} onDetail={o => setDetailOrder(o)} onDeliver={(id, t) => setConfirm({ type: t, id, action: "deliver" })} onRevision={(id, t) => setConfirm({ type: t, id, action: "revision" })} isAdmin={isAdmin} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} />}
         {(() => {
           const isGenaro = user?.name?.toLowerCase().includes("genaro") || user?.email?.toLowerCase().includes("genaro");
           return (
@@ -1359,10 +1564,23 @@ export default function App() {
             </>}
             {confirm.action === "deliver" && <>
               <div style={S.confirmTitle}>¿Pedido Listo?</div>
-              <div style={S.confirmText}>El pedido pasará a <strong>Pedido Listo</strong> — el vendedor podrá marcarlo como despachado.</div>
+              <div style={S.confirmText}>El pedido pasará a <strong>Pedido Listo</strong>. Indica quién fue el estampador.</div>
+              <div style={{ marginTop: 16 }}>
+                <label style={S.label}>Estampador *</label>
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  {ESTAMPADORES.map(est => (
+                    <button key={est} onClick={() => setConfirm({ ...confirm, estampador: est })}
+                      style={{ flex: 1, padding: "12px", borderRadius: 8, border: confirm.estampador === est ? "2px solid #059669" : "1px solid #E5E7EB", background: confirm.estampador === est ? "#F0FDF4" : "#fff", color: confirm.estampador === est ? "#059669" : "#6B7280", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "Montserrat, sans-serif" }}>
+                      {est}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div style={S.confirmBtns}>
                 <button style={S.btnGhost} onClick={() => setConfirm(null)}>Cancelar</button>
-                <button style={{ ...S.btnPrimary, background: "#059669" }} onClick={() => markDelivered(confirm.id, confirm.type)}>✓ Marcar listo</button>
+                <button style={!confirm.estampador ? S.btnDisabled : { ...S.btnPrimary, background: "#059669" }}
+                  disabled={!confirm.estampador}
+                  onClick={() => markDelivered(confirm.id, confirm.type, confirm.estampador)}>✓ Marcar listo</button>
               </div>
             </>}
             {confirm.action === "revision" && <>
@@ -1471,6 +1689,19 @@ function Dashboard({ data, allPending }) {
   const revision = (data.revision || []).length;
 
   const byVend = SELLERS.map(v => ({ name: v, four: fF.filter(o => o.vendedor === v).length, subD: fS.filter(o => o.vendedor === v && o.stage === "diseno").length, subP: fS.filter(o => o.vendedor === v && o.stage === "produccion").length })).filter(v => v.four + v.subD + v.subP > 0);
+
+  // Producción por estampador: cuenta pedidos marcados listo (incluye los ya entregados) en el período
+  const estampadosDone = [...(data.listo || []), ...(data.delivered || [])].filter(o => o.estampador && o.listoAt && check(o.listoAt));
+  const byEstampador = ESTAMPADORES.map(est => {
+    const suyos = estampadosDone.filter(o => o.estampador === est);
+    return {
+      name: est,
+      pedidos: suyos.length,
+      prendas: suyos.reduce((s, o) => s + (Number(o.cantidad) || 0), 0),
+      estampados: suyos.reduce((s, o) => s + (Number(o.cantidadEstampados) || 0), 0),
+    };
+  });
+  const totalEstampPedidos = byEstampador.reduce((s, e) => s + e.pedidos, 0);
 
   const next = [...fA].sort((a, b) => {
     const da = a.type === "four" ? a.deadline : (a.stage === "produccion" ? a.deadlineProduccion : a.deadlineDiseno);
@@ -1653,6 +1884,43 @@ function Dashboard({ data, allPending }) {
         </div>
       </div>
 
+      {/* ── ROW 3.5: Producción por Estampador ── */}
+      <div style={{ ...S.card, marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={{ fontFamily: "NikeFutura, Montserrat, sans-serif", fontSize: 14, color: "#111827", fontWeight: 900, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+            🖨 Producción por Estampador
+          </div>
+          <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>{totalEstampPedidos} pedidos en el período</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+          {byEstampador.map(est => (
+            <div key={est.name} style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 12, padding: "18px 20px" }}>
+              <div style={{ fontSize: 15, fontWeight: 900, color: "#111827", marginBottom: 14, textTransform: "uppercase", letterSpacing: "0.04em", fontFamily: "NikeFutura, Montserrat, sans-serif" }}>{est.name}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 600 }}>Pedidos</span>
+                  <span style={{ fontSize: 22, fontWeight: 900, color: "#111827", lineHeight: 1 }}>{est.pedidos}</span>
+                </div>
+                <div style={{ height: 1, background: "#E5E7EB" }} />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 600 }}>Prendas</span>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: "#3B82F6" }}>{est.prendas}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 600 }}>Estampados</span>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: "#059669" }}>{est.estampados}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {totalEstampPedidos === 0 && (
+          <div style={{ textAlign: "center", padding: "16px", color: "#D1D5DB", fontSize: 13, marginTop: 8 }}>
+            Sin pedidos marcados como listos en este período
+          </div>
+        )}
+      </div>
+
       {/* ── ROW 4: Por vendedor + Próximos vencimientos ── */}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
         <div style={{ ...S.card, flex: 1, minWidth: 260 }}>
@@ -1681,8 +1949,13 @@ function Dashboard({ data, allPending }) {
               return (
                 <div key={o.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #F3F4F6" }}>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: "#111827", textTransform: "uppercase" }}>{o.cliente}</div>
-                    <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 600, marginTop: 2 }}>{o.vendedor} · {o.type === "four" ? (o.express ? "⚡Express" : "Four") : `Sub·${o.stage === "diseno" ? "Diseño" : "Prod"}`}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: "#111827", textTransform: "uppercase" }}>{o.cliente}</span>
+                      <span style={{ ...S.chip, fontSize: 9, padding: "2px 7px", background: o.type === "four" ? "#EFF6FF" : "#F5F3FF", color: o.type === "four" ? "#3B82F6" : "#7C3AED" }}>
+                        {o.type === "four" ? (o.express ? "⚡ FOUR EXPRESS" : "FOUR") : "SUBLIMADO"}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 600 }}>{o.vendedor}{o.type === "sub" ? ` · ${o.stage === "diseno" ? "Diseño" : "Producción"}` : ""}</div>
                   </div>
                   <DeadlineBadge dl={dl} />
                 </div>
@@ -1691,120 +1964,6 @@ function Dashboard({ data, allPending }) {
           }
         </div>
       </div>
-    </div>
-  );
-}
-
-// ─── PEDIDOS DEL DÍA VIEW ────────────────────────────────────────────────────
-function PedidosDiaView({ orders, onDetail, onDeliver, onRevision, onDelete, isAdmin }) {
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-  const manana = new Date(hoy); manana.setDate(hoy.getDate() + 1);
-
-  // Four: todos los vencidos o que vencen hoy, ordenados de más urgente (más vencido) a menos
-  const fourDia = orders
-    .filter(o => o.type === "four")
-    .filter(o => { const dl = o.deadline; if (!dl) return false; return new Date(dl) < manana; })
-    .sort((a, b) => new Date(a.deadline) - new Date(b.deadline))
-    .slice(0, 10);
-
-  // Sub: solo el MÁS urgente (1 pedido)
-  const subDia = orders
-    .filter(o => o.type === "sub")
-    .filter(o => {
-      const dl = o.stage === "produccion" ? o.deadlineProduccion : o.deadlineDiseno;
-      if (!dl) return false;
-      return new Date(dl) < manana;
-    })
-    .sort((a, b) => {
-      const da = a.stage === "produccion" ? a.deadlineProduccion : a.deadlineDiseno;
-      const db = b.stage === "produccion" ? b.deadlineProduccion : b.deadlineDiseno;
-      return new Date(da) - new Date(db);
-    })
-    .slice(0, 1);
-
-  const total = fourDia.length + subDia.length;
-
-  const NeonDivider = ({ label }) => (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#111827", borderRadius: 10, padding: "16px 22px", marginBottom: 8, marginTop: 4 }}>
-      <span style={{ fontFamily: "NikeFutura, Montserrat, sans-serif", fontSize: 16, fontWeight: 900, color: "#39FF14", letterSpacing: "0.12em", textTransform: "uppercase", textShadow: "0 0 10px #39FF14, 0 0 20px #39FF1466" }}>{label}</span>
-    </div>
-  );
-
-  const DiaCard = ({ o, rank }) => {
-    const isFour = o.type === "four";
-    const dl = isFour ? o.deadline : (o.stage === "produccion" ? o.deadlineProduccion : o.deadlineDiseno);
-    const days = dl ? dLeft(dl) : null;
-    const isVencido = days !== null && days < 0;
-    const isHoy = days === 0;
-    return (
-      <div style={{ ...S.orderCard, borderLeft: `4px solid ${isVencido ? "#DC2626" : "#F59E0B"}`, background: isVencido ? "#FFF5F5" : "#FFFBEB" }}>
-        <div style={{ width: 32, height: 32, borderRadius: "50%", background: isVencido ? "#DC2626" : "#F59E0B", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 900, flexShrink: 0 }}>{rank}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5, flexWrap: "wrap" }}>
-            <span style={{ fontWeight: 900, fontSize: 17, color: "#111827", textTransform: "uppercase" }}>{o.cliente}</span>
-            {isFour && o.express && <span style={S.chipExpress}>⚡ EXPRESS</span>}
-            {!isFour && <span style={{ ...S.chip, background: o.stage === "diseno" ? "#FEE2E2" : "#FEF3C7", color: o.stage === "diseno" ? "#DC2626" : "#D97706" }}>{o.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN"}</span>}
-            <span style={{ ...S.chip, background: isVencido ? "#FEE2E2" : "#FEF3C7", color: isVencido ? "#DC2626" : "#D97706", fontWeight: 800 }}>
-              {isVencido ? `VENCIDO ${Math.abs(days)}d` : "HOY"}
-            </span>
-          </div>
-          <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexWrap: "wrap", marginBottom: 4 }}>
-            <span style={{ fontWeight: 800, color: "#374151" }}>{o.vendedor}</span>
-            <span>·</span><span>{o.deporte}</span>
-            <span>·</span><span>{o.cantidad} prendas</span>
-            <span>·</span><span style={{ fontWeight: 700, color: "#374151" }}>{fmtCurrency(o.valor)}</span>
-            {o.notaVenta && <><span>·</span><span style={{ fontWeight: 700, color: "#9CA3AF" }}>NV #{o.notaVenta}</span></>}
-          </div>
-          <div style={{ fontSize: 13, color: "#6B7280", fontWeight: 600, marginTop: 3 }}>📅 Entrega: {fmtDate(dl)}</div>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0, marginLeft: 12 }}>
-          <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
-          {isAdmin && <button style={{ ...S.actionBtn, background: "#059669", color: "#fff" }} onClick={() => onDeliver(o.id, o.type)}>✓ Marcar listo</button>}
-          {isAdmin && <button style={{ ...S.actionBtn, background: "#F59E0B", color: "#fff" }} onClick={() => onRevision(o.id, o.type)}>⚠ Revisión</button>}
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <h2 style={{ ...S.pageTitle, margin: 0 }}>Pedidos del Día</h2>
-          <p style={{ fontSize: 13, color: "#9CA3AF", margin: "4px 0 0", fontFamily: "Montserrat, sans-serif" }}>
-            Pedidos vencidos y con entrega para hoy, ordenados de más a menos urgente.
-          </p>
-        </div>
-        {total === 0 && <span style={{ background: "#DCFCE7", color: "#15803D", fontSize: 13, fontWeight: 700, padding: "6px 16px", borderRadius: 8 }}>✓ Sin urgencias hoy</span>}
-      </div>
-
-      {total === 0 ? (
-        <div style={S.emptyCard}>No hay pedidos vencidos ni con entrega para hoy 🎉</div>
-      ) : (
-        <>
-          <NeonDivider label={`Pedidos Four · ${fourDia.length}`} />
-          {fourDia.length === 0
-            ? <div style={{ ...S.emptyCard, marginBottom: 16 }}>Sin pedidos Four urgentes hoy</div>
-            : fourDia.map((o, i) => <DiaCard key={o.id} o={o} rank={i + 1} />)
-          }
-
-          <div style={{ marginTop: 16 }}>
-            <NeonDivider label={`Sublimado · ${subDia.length} (máx. 1)`} />
-            {subDia.length === 0
-              ? <div style={{ ...S.emptyCard, marginBottom: 16 }}>Sin sublimados urgentes hoy</div>
-              : subDia.map((o, i) => <DiaCard key={o.id} o={o} rank={1} />)
-            }
-            {subDia.length === 0 && orders.filter(o => o.type === "sub").filter(o => {
-              const dl = o.stage === "produccion" ? o.deadlineProduccion : o.deadlineDiseno;
-              return dl && new Date(dl) >= manana;
-            }).length > 0 && (
-              <div style={{ fontSize: 12, color: "#9CA3AF", padding: "8px 16px", fontStyle: "italic" }}>
-                Solo se puede entregar 1 sublimado por día. El siguiente en cola está pendiente.
-              </div>
-            )}
-          </div>
-        </>
-      )}
     </div>
   );
 }
@@ -2018,17 +2177,16 @@ function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetai
 
 // ─── LISTO: PENDIENTE DE ENTREGA ─────────────────────────────────────────────
 function ListoPendienteView({ orders, onEntregado, onDetail }) {
-  return (
-    <div>
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ ...S.pageTitle, margin: 0 }}>Pendiente de Entrega</h2>
-        <p style={{ fontSize: 12, color: "#9CA3AF", margin: "4px 0 0", fontFamily: "Montserrat, sans-serif" }}>
-          Pedidos listos para entregar al cliente. Marca como entregado cuando el vendedor lo despache.
-        </p>
-      </div>
-      {orders.length === 0
-        ? <div style={S.emptyCard}>No hay pedidos pendientes de entrega</div>
-        : orders.map(o => (
+  // Group by day (listoAt date)
+  const grouped = {};
+  [...orders].sort((a, b) => new Date(b.listoAt) - new Date(a.listoAt)).forEach(o => {
+    const key = o.listoAt ? new Date(o.listoAt).toLocaleDateString("es-CL", { day: "2-digit", month: "long", year: "numeric" }) : "Sin fecha";
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(o);
+  });
+  const groupKeys = Object.keys(grouped);
+
+  const renderCard = (o) => (
           <div key={o.id} style={{ ...S.orderCard, borderLeft: "3px solid #059669", background: "#F0FDF4" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
@@ -2057,6 +2215,27 @@ function ListoPendienteView({ orders, onEntregado, onDetail }) {
               <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
               <button style={{ ...S.actionBtn, background: "#059669", color: "#fff", padding: "9px 16px", fontSize: 11 }} onClick={() => onEntregado(o.id)}>📦 Marcar entregado</button>
             </div>
+          </div>
+  );
+
+  return (
+    <div>
+      <div style={{ marginBottom: 24 }}>
+        <h2 style={{ ...S.pageTitle, margin: 0 }}>Pendiente de Entrega</h2>
+        <p style={{ fontSize: 12, color: "#9CA3AF", margin: "4px 0 0", fontFamily: "Montserrat, sans-serif" }}>
+          Pedidos listos para entregar al cliente, agrupados por día. Marca como entregado cuando el vendedor lo despache.
+        </p>
+      </div>
+      {orders.length === 0
+        ? <div style={S.emptyCard}>No hay pedidos pendientes de entrega</div>
+        : groupKeys.map(day => (
+          <div key={day} style={{ marginBottom: 24 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <span style={{ fontFamily: "NikeFutura, Montserrat, sans-serif", fontSize: 14, fontWeight: 900, color: "#059669", letterSpacing: "0.08em", textTransform: "uppercase" }}>📅 {day}</span>
+              <span style={{ background: "#DCFCE7", color: "#15803D", fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 10 }}>{grouped[day].length} pedido{grouped[day].length > 1 ? "s" : ""}</span>
+              <div style={{ flex: 1, height: 1, background: "#E5E7EB" }} />
+            </div>
+            {grouped[day].map(o => renderCard(o))}
           </div>
         ))
       }
