@@ -444,7 +444,7 @@ function Section({ title, count, accent, children, defaultOpen = true }) {
 }
 
 // ─── ORDER CARD ───────────────────────────────────────────────────────────────
-function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDetail, onDelete, isAdmin }) {
+function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDetail, onDelete, isAdmin, position }) {
   const isFour = order.type === "four";
   const dl = isFour ? order.deadline : (order.stage === "produccion" ? order.deadlineProduccion : order.deadlineDiseno);
   const days = dl ? dLeft(dl) : null;
@@ -452,6 +452,11 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDet
   const totalFiles = (order.files?.length || 0) + (order.filesNota?.length || 0);
   return (
     <div style={{ ...S.orderCard, borderLeft: `3px solid ${urgent ? "#EF4444" : accentColor}` }}>
+      {position != null && (
+        <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: "50%", background: urgent ? "#EF4444" : accentColor, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 900, marginRight: 14, fontFamily: "NikeFutura, Montserrat, sans-serif" }}>
+          {position}
+        </div>
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
           <span style={{ fontWeight: 900, fontSize: 18, color: "#111827", textTransform: "uppercase", letterSpacing: "0.02em" }}>{order.cliente}</span>
@@ -2244,7 +2249,7 @@ function FourView({ orders, isAdmin, onDeliver, onRevision, onDetail, onDelete, 
             onDrop={() => handleDrop(i)}
             onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
             style={{ opacity: dragIdx === i ? 0.4 : 1, borderTop: dragOverIdx === i && dragIdx !== i ? "3px solid #39FF14" : "3px solid transparent", transition: "opacity 0.15s", cursor: onReorder ? "grab" : "default" }}>
-            <OrderCard order={o} accentColor="#3B82F6" isAdmin={isAdmin}
+            <OrderCard order={o} accentColor="#3B82F6" isAdmin={isAdmin} position={i + 1}
               onDetail={() => onDetail(o)}
               onDeliver={() => onDeliver(o.id)}
               onRevision={isAdmin ? () => onRevision(o.id) : null}
@@ -2290,7 +2295,7 @@ function SubView({ orders, isAdmin, onApprove, onDeliver, onRevision, onDetail, 
       onDrop={() => handleDrop(i, section)}
       onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); setDragSection(null); }}
       style={{ opacity: dragIdx === i && dragSection === section ? 0.4 : 1, borderTop: dragOverIdx === i && dragSection === section && dragIdx !== i ? "3px solid #39FF14" : "3px solid transparent", transition: "opacity 0.15s", cursor: onReorder ? "grab" : "default" }}>
-      <OrderCard order={o} accentColor={accentColor} isAdmin={isAdmin}
+      <OrderCard order={o} accentColor={accentColor} isAdmin={isAdmin} position={i + 1}
         onDetail={() => onDetail(o)}
         onRevision={isAdmin ? () => onRevision(o.id) : null}
         onDelete={isAdmin ? () => onDelete(o.id) : null}
