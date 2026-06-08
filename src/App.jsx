@@ -1203,11 +1203,17 @@ export default function App() {
     persist({ ...data, sub: data.sub.map(o => o.id === id ? patched : o) }, [patched]);
     setConfirm(null);
   };
-  const markDelivered = (id, type, estampador = null) => {
+  const markDelivered = async (id, type, estampador = null) => {
     const list = type === "four" ? data.four : type === "sub" ? data.sub : (data.revision || []);
     const order = list.find(o => o.id === id);
     if (!order) return;
-    const updated = { ...order, listoAt: new Date().toISOString(), status: "listo", estampador: estampador || order.estampador || null };
+    // Borrar archivos del Storage para ahorrar memoria (logos, maquetas, nota de venta)
+    const allFiles = [...(order.files || []), ...(order.filesMaqueta || []), ...(order.filesNota || [])];
+    const paths = allFiles.filter(f => f && f.path).map(f => f.path);
+    if (paths.length > 0) {
+      try { await supabase.storage.from("archivos").remove(paths); } catch (e) { console.warn("No se pudieron borrar archivos:", e); }
+    }
+    const updated = { ...order, listoAt: new Date().toISOString(), status: "listo", estampador: estampador || order.estampador || null, files: [], filesMaqueta: [], filesNota: [] };
     const newData = {
       ...data,
       four: data.four.filter(o => o.id !== id),
@@ -1733,15 +1739,19 @@ function ChatWidget({ open, onOpen, onClose, messages, userName, input, setInput
   if (!open) {
     return (
       <button onClick={onOpen} style={{
-        position: "fixed", bottom: 28, right: 28, zIndex: 400,
-        width: 60, height: 60, borderRadius: "50%", border: "none", cursor: "pointer",
+        position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", zIndex: 400,
+        border: "none", cursor: "pointer",
         background: "linear-gradient(135deg, #111827 0%, #1F2937 100%)",
-        color: "#39FF14", fontSize: 26, boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-        display: "flex", alignItems: "center", justifyContent: "center",
+        color: "#39FF14", fontSize: 14, fontWeight: 800, letterSpacing: "0.08em",
+        fontFamily: "NikeFutura, Montserrat, sans-serif", textTransform: "uppercase",
+        boxShadow: "0 -4px 20px rgba(0,0,0,0.2)",
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "12px 28px", borderRadius: "14px 14px 0 0",
       }}>
-        💬
+        <span style={{ fontSize: 18 }}>💬</span>
+        Chat grupal
         {unread > 0 && (
-          <span style={{ position: "absolute", top: -2, right: -2, background: "#EF4444", color: "#fff", fontSize: 11, fontWeight: 800, minWidth: 22, height: 22, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid #fff" }}>
+          <span style={{ background: "#EF4444", color: "#fff", fontSize: 11, fontWeight: 800, minWidth: 20, height: 20, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 6px" }}>
             {unread}
           </span>
         )}
