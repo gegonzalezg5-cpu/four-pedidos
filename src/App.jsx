@@ -113,6 +113,29 @@ async function markAllNotificationsRead(name) {
   try { await supabase.from("notificaciones").update({ leida: true }).eq("para", name).eq("leida", false); } catch {}
 }
 
+// ─── CHAT HELPERS ─────────────────────────────────────────────────────────────
+async function loadMessages() {
+  try {
+    const { data, error } = await supabase.from("mensajes")
+      .select("*").order("created_at", { ascending: true }).limit(200);
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.warn("Messages load failed:", e);
+    return [];
+  }
+}
+async function sendMessage(autor, texto) {
+  try {
+    const { error } = await supabase.from("mensajes").insert({ autor, texto });
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.warn("Message send failed:", e);
+    return false;
+  }
+}
+
 // ─── DATE HELPERS ─────────────────────────────────────────────────────────────
 function addWorkdays(date, days) {
   let d = new Date(date), added = 0;
@@ -1048,6 +1071,12 @@ export default function App() {
   const [notifs, setNotifs]           = useState([]);
   const [notifsOpen, setNotifsOpen]   = useState(false);
   const [search, setSearch]           = useState("");
+  const [chatOpen, setChatOpen]       = useState(false);
+  const [messages, setMessages]       = useState([]);
+  const [chatInput, setChatInput]     = useState("");
+  const [lastSeenChat, setLastSeenChat] = useState(() => {
+    try { return localStorage.getItem("fs_last_chat") || null; } catch { return null; }
+  });
   const pedidosRef                    = useRef(null);
   const listoRef                      = useRef(null);
   const notifsRef                     = useRef(null);
@@ -1106,6 +1135,19 @@ export default function App() {
     return () => { supabase.removeChannel(ch); };
   }, [user?.name]);
 
+  // Load chat messages + realtime
+  useEffect(() => {
+    if (!user?.name) return;
+    loadMessages().then(setMessages);
+    const ch = supabase
+      .channel("chat-changes")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "mensajes" }, payload => {
+        setMessages(prev => [...prev, payload.new]);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user?.name]);
+
   const handleLogin = (u) => {
     setUser(u);
     try { sessionStorage.setItem("fs_user", JSON.stringify(u)); } catch {}
@@ -1114,6 +1156,22 @@ export default function App() {
     setUser(null);
     try { sessionStorage.removeItem("fs_user"); } catch {}
   };
+
+  const handleSendMessage = async () => {
+    const txt = chatInput.trim();
+    if (!txt || !user?.name) return;
+    setChatInput("");
+    await sendMessage(user.name, txt);
+  };
+
+  const openChat = () => {
+    setChatOpen(true);
+    const now = new Date().toISOString();
+    setLastSeenChat(now);
+    try { localStorage.setItem("fs_last_chat", now); } catch {}
+  };
+
+  const unreadChat = messages.filter(m => m.autor !== user?.name && (!lastSeenChat || new Date(m.created_at) > new Date(lastSeenChat))).length;
 
   const persist = useCallback(async (nd, changedOrders = []) => {
     setData(nd);
@@ -1635,6 +1693,132 @@ export default function App() {
             delivered: (prev.delivered||[]).map(o => o.id === updated.id ? updated : o),
           }));
         }} />}
+
+      {/* ── CHAT FLOTANTE ── */}
+      <ChatWidget
+        open={chatOpen}
+        onOpen={openChat}
+        onClose={() => setChatOpen(false)}
+        messages={messages}
+        userName={user.name}
+        input={chatInput}
+        setInput={setChatInput}
+        onSend={handleSendMessage}
+        unread={unreadChat}
+      />
+    </div>
+  );
+}
+
+// ─── CHAT WIDGET ──────────────────────────────────────────────────────────────
+const EMOJIS = ["👍","👌","🙌","🔥","✅","❌","⚠️","🎨","👕","⚡","🙏","😅","😂","😉","💪","👀","📌","🕐"];
+
+function ChatWidget({ open, onOpen, onClose, messages, userName, input, setInput, onSend, unread }) {
+  const scrollRef = useRef(null);
+  const [showEmojis, setShowEmojis] = useState(false);
+
+  useEffect(() => {
+    if (open && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [open, messages.length]);
+
+  const fmtTime = ts => {
+    const d = new Date(ts);
+    const today = new Date(); today.setHours(0,0,0,0);
+    const md = new Date(d); md.setHours(0,0,0,0);
+    const hora = d.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
+    if (md.getTime() === today.getTime()) return hora;
+    return `${d.toLocaleDateString("es-CL", { day: "2-digit", month: "short" })} ${hora}`;
+  };
+
+  if (!open) {
+    return (
+      <button onClick={onOpen} style={{
+        position: "fixed", bottom: 28, right: 28, zIndex: 400,
+        width: 60, height: 60, borderRadius: "50%", border: "none", cursor: "pointer",
+        background: "linear-gradient(135deg, #111827 0%, #1F2937 100%)",
+        color: "#39FF14", fontSize: 26, boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        💬
+        {unread > 0 && (
+          <span style={{ position: "absolute", top: -2, right: -2, background: "#EF4444", color: "#fff", fontSize: 11, fontWeight: 800, minWidth: 22, height: 22, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid #fff" }}>
+            {unread}
+          </span>
+        )}
+      </button>
+    );
+  }
+
+  return (
+    <div style={{
+      position: "fixed", bottom: 28, right: 28, zIndex: 400,
+      width: 380, maxWidth: "calc(100vw - 32px)", height: 540, maxHeight: "calc(100vh - 100px)",
+      background: "#fff", borderRadius: 18, boxShadow: "0 16px 48px rgba(0,0,0,0.28)",
+      display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid #E5E7EB",
+    }}>
+      {/* Header */}
+      <div style={{ background: "linear-gradient(135deg, #111827 0%, #1F2937 100%)", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 20 }}>💬</span>
+          <div>
+            <div style={{ fontFamily: "NikeFutura, Montserrat, sans-serif", fontSize: 15, fontWeight: 900, color: "#39FF14", letterSpacing: "0.08em", textShadow: "0 0 10px #39FF1466" }}>CHAT EQUIPO</div>
+            <div style={{ fontSize: 10, color: "#9CA3AF" }}>Four Sport</div>
+          </div>
+        </div>
+        <button onClick={onClose} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 16 }}>✕</button>
+      </div>
+
+      {/* Mensajes */}
+      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "16px", background: "#F9FAFB", display: "flex", flexDirection: "column", gap: 10 }}>
+        {messages.length === 0 ? (
+          <div style={{ textAlign: "center", color: "#D1D5DB", fontSize: 13, marginTop: 40 }}>
+            Aún no hay mensajes.<br />¡Escribe el primero! 👋
+          </div>
+        ) : messages.map(m => {
+          const mine = m.autor === userName;
+          return (
+            <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start" }}>
+              {!mine && <span style={{ fontSize: 10, fontWeight: 800, color: "#6B7280", marginBottom: 2, marginLeft: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>{m.autor}</span>}
+              <div style={{
+                maxWidth: "78%", padding: "9px 13px", borderRadius: 14,
+                background: mine ? "#111827" : "#fff",
+                color: mine ? "#fff" : "#111827",
+                border: mine ? "none" : "1px solid #E5E7EB",
+                fontSize: 14, lineHeight: 1.4, wordBreak: "break-word",
+                borderBottomRightRadius: mine ? 4 : 14, borderBottomLeftRadius: mine ? 14 : 4,
+              }}>
+                {m.texto}
+              </div>
+              <span style={{ fontSize: 9, color: "#9CA3AF", marginTop: 3, marginLeft: mine ? 0 : 6, marginRight: mine ? 6 : 0 }}>{fmtTime(m.created_at)}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Emoji picker */}
+      {showEmojis && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "8px 12px", background: "#F3F4F6", borderTop: "1px solid #E5E7EB" }}>
+          {EMOJIS.map(em => (
+            <button key={em} onClick={() => { setInput(input + em); }} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", padding: 2, lineHeight: 1 }}>{em}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Input */}
+      <div style={{ padding: "12px", borderTop: "1px solid #E5E7EB", background: "#fff", display: "flex", alignItems: "center", gap: 8 }}>
+        <button onClick={() => setShowEmojis(s => !s)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", padding: 4, lineHeight: 1 }}>😊</button>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); setShowEmojis(false); } }}
+          placeholder="Escribe un mensaje..."
+          style={{ flex: 1, padding: "10px 14px", borderRadius: 20, border: "1px solid #E5E7EB", fontSize: 14, outline: "none", fontFamily: "Montserrat, sans-serif", background: "#F9FAFB" }}
+        />
+        <button onClick={() => { onSend(); setShowEmojis(false); }} disabled={!input.trim()}
+          style={{ background: input.trim() ? "#111827" : "#E5E7EB", color: input.trim() ? "#39FF14" : "#9CA3AF", border: "none", borderRadius: "50%", width: 40, height: 40, cursor: input.trim() ? "pointer" : "default", fontSize: 16, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          ➤
+        </button>
+      </div>
     </div>
   );
 }
