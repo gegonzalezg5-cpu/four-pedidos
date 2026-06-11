@@ -2256,6 +2256,11 @@ function TodosView({ orders, isAdmin, onDeliver, onApprove, onRevision, onDetail
   const sortByOrder = (a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || new Date(a.createdAt) - new Date(b.createdAt);
   const fourOrders = orders.filter(o => o.type === "four" && (fv === "Todos" || o.vendedor === fv)).sort(sortByOrder);
   const subOrders  = orders.filter(o => o.type === "sub"  && (fv === "Todos" || o.vendedor === fv)).sort(sortByOrder);
+  // Pedidos atrasados (vencidos): el más atrasado arriba
+  const getDeadline = o => o.type === "four" ? o.deadline : (o.stage === "produccion" ? o.deadlineProduccion : o.deadlineDiseno);
+  const atrasados = [...fourOrders, ...subOrders]
+    .filter(o => { const dl = getDeadline(o); return dl && dLeft(dl) < 0; })
+    .sort((a, b) => new Date(getDeadline(a)) - new Date(getDeadline(b)));
 
   return (
     <div>
@@ -2282,6 +2287,24 @@ function TodosView({ orders, isAdmin, onDeliver, onApprove, onRevision, onDetail
               onRevision={isAdmin ? () => onRevision(o.id, "sub") : null}
               onDelete={isAdmin ? () => onDelete(o.id) : null} />)}
       </Section>
+
+      {/* Pedidos Atrasados (vencidos) */}
+      <div style={{ marginTop: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#7F1D1D", borderRadius: 10, padding: "16px 22px", marginBottom: 10 }}>
+          <span style={{ fontFamily: "NikeFutura, Montserrat, sans-serif", fontSize: 16, fontWeight: 900, color: "#FCA5A5", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+            🔥 Pedidos Atrasados
+          </span>
+          <span style={{ background: "#DC2626", color: "#fff", fontSize: 13, fontWeight: 800, padding: "3px 12px", borderRadius: 10 }}>{atrasados.length}</span>
+        </div>
+        {atrasados.length === 0
+          ? <div style={S.emptyCard}>✓ Sin pedidos atrasados</div>
+          : atrasados.map((o, i) => <OrderCard key={o.id} order={o} accentColor="#DC2626" isAdmin={isAdmin} position={i + 1}
+              onDetail={() => onDetail(o)}
+              onDeliver={() => onDeliver(o.id, o.type)}
+              onApprove={o.type === "sub" && o.stage === "diseno" ? () => onApprove(o.id) : null}
+              onRevision={isAdmin ? () => onRevision(o.id, o.type) : null}
+              onDelete={isAdmin ? () => onDelete(o.id) : null} />)}
+      </div>
     </div>
   );
 }
