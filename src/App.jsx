@@ -466,14 +466,14 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDet
           {order.listoAt && !order.deliveredAt && <span style={{ ...S.chip, background: "#DCFCE7", color: "#15803D" }}>✓ LISTO</span>}
           {totalFiles > 0 && <span style={{ ...S.chip, background: "#EFF6FF", color: "#3B82F6" }}>📎 {totalFiles}</span>}
         </div>
-        <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexWrap: "wrap", marginBottom: 4 }}>
+        <div style={{ display: "flex", gap: 12, fontSize: 14, color: "#4B5563", flexWrap: "wrap", marginBottom: 5, alignItems: "center" }}>
           <span style={{ fontWeight: 800, color: "#374151" }}>{order.vendedor}</span>
           <span>·</span><span>{order.deporte}</span>
           <span>·</span><span>{order.cantidad} prendas</span>
           <span>·</span><span style={{ fontWeight: 700, color: "#374151" }}>{fmtCurrency(order.valor)}</span>
           {order.notaVenta && <><span>·</span><span style={{ fontWeight: 700, color: "#9CA3AF" }}>NV #{order.notaVenta}</span></>}
         </div>
-        <div style={{ fontSize: 13, color: "#6B7280", fontWeight: 600, marginTop: 5 }}>📅 {fmtDate(order.createdAt)} <span style={{ color: "#9CA3AF" }}>{order.horaEnvio}</span></div>
+        <div style={{ fontSize: 14, color: "#6B7280", fontWeight: 600, marginTop: 5 }}>📅 {fmtDate(order.createdAt)} <span style={{ color: "#9CA3AF" }}>{order.horaEnvio}</span></div>
       </div>
       {/* Right: deadline + actions */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0, marginLeft: 12 }}>
@@ -1349,7 +1349,10 @@ export default function App() {
   const allPending = [...data.four, ...data.sub];
   const revisionCount = (data.revision || []).length;
   const listoCount = (data.listo || []).length;
-  const pedidosViews = ["todos","four","sub"];
+  const pedidosViews = ["todos","four","sub","atrasados"];
+  // Conteo de pedidos atrasados (vencidos)
+  const _getDl = o => o.type === "four" ? o.deadline : (o.stage === "produccion" ? o.deadlineProduccion : o.deadlineDiseno);
+  const atrasadosCount = [...data.four, ...data.sub].filter(o => { const dl = _getDl(o); return dl && dLeft(dl) < 0; }).length;
   const isPedidosActive = pedidosViews.includes(view);
   const listoViews = ["listo_pendiente","listo_entregado"];
   const isListoActive = listoViews.includes(view);
@@ -1385,6 +1388,7 @@ export default function App() {
                     { id: "todos", label: "Todos los Pedidos", count: allPending.length },
                     { id: "four",  label: "Pedidos Four",      count: data.four.length },
                     { id: "sub",   label: "Sublimados",        count: data.sub.length },
+                    { id: "atrasados", label: "🔥 Pedidos Atrasados", count: atrasadosCount },
                   ].map(item => (
                     <button key={item.id} onClick={() => { setView(item.id); setPedidosOpen(false); }}
                       style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", padding: "9px 12px", background: view === item.id ? "#374151" : "transparent", border: "none", borderRadius: 7, cursor: "pointer", fontFamily: "Montserrat, sans-serif", fontSize: 11, fontWeight: 700, color: view === item.id ? "#F9FAFB" : "#9CA3AF", letterSpacing: "0.04em", textAlign: "left" }}>
@@ -1607,6 +1611,7 @@ export default function App() {
               {view === "todos"      && <TodosView orders={allPending} isAdmin={isAdmin} onDeliver={(id, t) => setConfirm({ type: t, id, action: "deliver" })} onApprove={id => setConfirm({ type: "sub", id, action: "approve" })} onRevision={(id, t) => setConfirm({ type: t, id, action: "revision" })} onDetail={o => setDetailOrder(o)} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} />}
               {view === "four"       && <FourView  orders={data.four}  isAdmin={isAdmin} onDeliver={id => setConfirm({ type: "four", id, action: "deliver" })} onRevision={id => setConfirm({ type: "four", id, action: "revision" })} onDetail={o => setDetailOrder(o)} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} onReorder={isGenaro ? newList => reorderList("four", newList) : null} />}
               {view === "sub"        && <SubView   orders={data.sub}   isAdmin={isAdmin} onApprove={id => setConfirm({ type: "sub", id, action: "approve" })} onDeliver={id => setConfirm({ type: "sub", id, action: "deliver" })} onRevision={id => setConfirm({ type: "sub", id, action: "revision" })} onDetail={o => setDetailOrder(o)} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} onReorder={isGenaro ? newList => reorderList("sub", newList) : null} />}
+              {view === "atrasados" && <AtrasadosView orders={[...data.four, ...data.sub]} isAdmin={isAdmin} onDeliver={(id, t) => setConfirm({ type: t, id, action: "deliver" })} onApprove={id => setConfirm({ type: "sub", id, action: "approve" })} onRevision={(id, t) => setConfirm({ type: t, id, action: "revision" })} onDetail={o => setDetailOrder(o)} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} />}
             </>
           );
         })()}
@@ -2245,6 +2250,44 @@ function Dashboard({ data, allPending }) {
             })
           }
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ATRASADOS VIEW ───────────────────────────────────────────────────────────
+function AtrasadosView({ orders, isAdmin, onDeliver, onApprove, onRevision, onDetail, onDelete }) {
+  const [open, setOpen] = useState(true);
+  const getDeadline = o => o.type === "four" ? o.deadline : (o.stage === "produccion" ? o.deadlineProduccion : o.deadlineDiseno);
+  const atrasados = orders
+    .filter(o => { const dl = getDeadline(o); return dl && dLeft(dl) < 0; })
+    .sort((a, b) => new Date(getDeadline(a)) - new Date(getDeadline(b)));
+
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ ...S.pageTitle, margin: 0 }}>Pedidos Atrasados</h2>
+        <p style={{ fontSize: 13, color: "#9CA3AF", margin: "4px 0 0", fontFamily: "Montserrat, sans-serif" }}>
+          Pedidos vencidos ordenados de más a menos atrasado. El #1 es el más urgente.
+        </p>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <button onClick={() => setOpen(o => !o)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "#7F1D1D", borderRadius: 10, padding: "16px 22px", border: "none", cursor: "pointer", marginBottom: 10 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontFamily: "NikeFutura, Montserrat, sans-serif", fontSize: 16, fontWeight: 900, color: "#FCA5A5", letterSpacing: "0.1em", textTransform: "uppercase" }}>🔥 Pedidos Atrasados</span>
+            <span style={{ background: "#DC2626", color: "#fff", fontSize: 13, fontWeight: 800, padding: "3px 12px", borderRadius: 10 }}>{atrasados.length}</span>
+          </span>
+          <span style={{ color: "#FCA5A5", fontSize: 16, transition: "transform .2s", display: "inline-block", transform: open ? "rotate(180deg)" : "rotate(0)" }}>▾</span>
+        </button>
+        {open && (atrasados.length === 0
+          ? <div style={S.emptyCard}>✓ Sin pedidos atrasados</div>
+          : atrasados.map((o, i) => <OrderCard key={o.id} order={o} accentColor="#DC2626" isAdmin={isAdmin} position={i + 1}
+              onDetail={() => onDetail(o)}
+              onDeliver={() => onDeliver(o.id, o.type)}
+              onApprove={o.type === "sub" && o.stage === "diseno" ? () => onApprove(o.id) : null}
+              onRevision={isAdmin ? () => onRevision(o.id, o.type) : null}
+              onDelete={isAdmin ? () => onDelete(o.id) : null} />))}
       </div>
     </div>
   );
