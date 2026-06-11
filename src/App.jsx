@@ -151,7 +151,8 @@ function calcDeadlineFour(fe, ho, express) {
 function calcDeadlineSubDiseno(fe, ho) {
   const hour = ho ? parseInt(ho.split(":")[0], 10) : 0;
   const extraDay = hour >= 15 ? 1 : 0;
-  return addWorkdays(new Date(`${fe}T${ho}`), 2 + extraDay);
+  // Diseño sublimado: 5 días hábiles (+ 1 si después de las 15h).
+  return addWorkdays(new Date(`${fe}T${ho}`), 5 + extraDay);
 }
 function calcDeadlineSubProduccion(at) { return addWorkdays(new Date(at), 20); }
 function fmtDate(d) { return new Date(d).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" }); }
@@ -267,7 +268,7 @@ async function loadDataFromSupabase() {
       else if (o.type === "sub") result.sub.push(o);
     }
     // Sort by sortOrder (manual), then by createdAt (newest first)
-    const sortList = arr => [...arr].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || new Date(b.createdAt) - new Date(a.createdAt));
+    const sortList = arr => [...arr].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || new Date(a.createdAt) - new Date(b.createdAt));
     result.four = sortList(result.four);
     result.sub = sortList(result.sub);
     return result;
@@ -846,7 +847,9 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
     if (isAdmin && !isEdit) {
       const selected = new Date(`${form.fechaEnvio}T${form.horaEnvio}`);
       const now = new Date();
-      if (selected < now) {
+      // Margen de tolerancia de 10 minutos hacia atrás para evitar errores molestos
+      const margen = 10 * 60 * 1000;
+      if (selected.getTime() < now.getTime() - margen) {
         setDateError("No puedes ingresar un pedido con fecha u hora anterior a la actual.");
         return;
       }
@@ -948,7 +951,7 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
               />
               {fourPrev && (
                 <div style={{ ...S.previewBox, borderColor: form.express ? "#F59E0B" : "#E5E7EB" }}>
-                  <span style={{ fontSize: 11, color: "#9CA3AF" }}>Entrega estimada</span>
+                  <span style={{ fontSize: 11, color: "#9CA3AF" }}>Fecha máxima de entrega</span>
                   <span style={{ fontWeight: 800, fontSize: 15, color: form.express ? "#D97706" : "#111827" }}>{fmtDate(fourPrev.toISOString())}</span>
                   <span style={{ fontSize: 11, color: "#9CA3AF" }}>{form.express ? "2 días hábiles" : "5 días hábiles"}</span>
                 </div>
@@ -1079,6 +1082,7 @@ export default function App() {
   const [chatOpen, setChatOpen]       = useState(false);
   const [messages, setMessages]       = useState([]);
   const [chatInput, setChatInput]     = useState("");
+  const [showPassModal, setShowPassModal] = useState(false);
   const [lastSeenChat, setLastSeenChat] = useState(() => {
     try { return localStorage.getItem("fs_last_chat") || null; } catch { return null; }
   });
@@ -1482,6 +1486,7 @@ export default function App() {
               )}
             </div>
             <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>{user.name}</span>
+            <button onClick={() => setShowPassModal(true)} title="Cambiar clave" style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontFamily: "Montserrat, sans-serif", fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}>⚙ Clave</button>
             <button onClick={handleLogout} style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontFamily: "Montserrat, sans-serif", fontWeight: 600 }}>Salir</button>
           </div>
         </div>
@@ -1593,7 +1598,10 @@ export default function App() {
         })()}
         {view === "dashboard"  && <Dashboard data={data} allPending={allPending} />}
         {(() => {
-          const isGenaro = user?.name?.toLowerCase().includes("genaro") || user?.email?.toLowerCase().includes("genaro");
+          const reorderEmails = ["genaro@four.cl", "diego@four.cl", "miguel@four.cl"];
+          const reorderNames = ["genaro", "diego gonzalez", "miguel gonzalez"];
+          const canReorder = reorderEmails.includes((user?.email || "").toLowerCase()) || reorderNames.some(n => (user?.name || "").toLowerCase().includes(n));
+          const isGenaro = canReorder;
           return (
             <>
               {view === "todos"      && <TodosView orders={allPending} isAdmin={isAdmin} onDeliver={(id, t) => setConfirm({ type: t, id, action: "deliver" })} onApprove={id => setConfirm({ type: "sub", id, action: "approve" })} onRevision={(id, t) => setConfirm({ type: t, id, action: "revision" })} onDetail={o => setDetailOrder(o)} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} />}
@@ -1705,6 +1713,15 @@ export default function App() {
           }));
         }} />}
 
+      {/* ── Modal cambiar clave ── */}
+      {showPassModal && (
+        <ChangePasswordModal
+          user={user}
+          onClose={() => setShowPassModal(false)}
+          onChanged={newPass => { setUser({ ...user, password: newPass }); try { sessionStorage.setItem("fs_user", JSON.stringify({ ...user, password: newPass })); } catch {} }}
+        />
+      )}
+
       {/* ── CHAT FLOTANTE ── */}
       <ChatWidget
         open={chatOpen}
@@ -1717,6 +1734,72 @@ export default function App() {
         onSend={handleSendMessage}
         unread={unreadChat}
       />
+    </div>
+  );
+}
+
+// ─── CAMBIAR CLAVE MODAL ──────────────────────────────────────────────────────
+function ChangePasswordModal({ user, onClose, onChanged }) {
+  const [actual, setActual] = useState("");
+  const [nueva, setNueva] = useState("");
+  const [confirmar, setConfirmar] = useState("");
+  const [error, setError] = useState("");
+  const [ok, setOk] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setError("");
+    if (actual !== user.password) { setError("La clave actual no es correcta."); return; }
+    if (nueva.length < 4) { setError("La nueva clave debe tener al menos 4 caracteres."); return; }
+    if (nueva !== confirmar) { setError("Las claves nuevas no coinciden."); return; }
+    setSaving(true);
+    try {
+      const { error: err } = await supabase.from("usuarios").update({ password: nueva }).eq("email", user.email);
+      if (err) throw err;
+      setOk(true);
+      onChanged(nueva);
+      setTimeout(onClose, 1400);
+    } catch (e) {
+      setError("No se pudo guardar. Intenta de nuevo.");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...S.confirmModal, maxWidth: 380 }}>
+        <div style={S.confirmTitle}>Cambiar clave</div>
+        {ok ? (
+          <div style={{ textAlign: "center", padding: "20px 0" }}>
+            <div style={{ fontSize: 40, marginBottom: 8 }}>✓</div>
+            <div style={{ fontSize: 14, color: "#059669", fontWeight: 700 }}>Clave actualizada</div>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 8 }}>
+              <div>
+                <label style={S.label}>Clave actual</label>
+                <input type="password" style={{ ...S.input, marginTop: 5 }} value={actual} onChange={e => setActual(e.target.value)} placeholder="Tu clave actual" />
+              </div>
+              <div>
+                <label style={S.label}>Nueva clave</label>
+                <input type="password" style={{ ...S.input, marginTop: 5 }} value={nueva} onChange={e => setNueva(e.target.value)} placeholder="Mínimo 4 caracteres" />
+              </div>
+              <div>
+                <label style={S.label}>Repetir nueva clave</label>
+                <input type="password" style={{ ...S.input, marginTop: 5 }} value={confirmar} onChange={e => setConfirmar(e.target.value)} placeholder="Repite la nueva clave" onKeyDown={e => e.key === "Enter" && submit()} />
+              </div>
+            </div>
+            {error && <div style={{ color: "#DC2626", fontSize: 12, fontWeight: 600, marginTop: 10 }}>{error}</div>}
+            <div style={S.confirmBtns}>
+              <button style={S.btnGhost} onClick={onClose}>Cancelar</button>
+              <button style={saving ? S.btnDisabled : { ...S.btnPrimary, background: "#111827" }} disabled={saving} onClick={submit}>
+                {saving ? "Guardando..." : "Cambiar clave"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -2170,12 +2253,9 @@ function Dashboard({ data, allPending }) {
 // ─── TODOS VIEW ───────────────────────────────────────────────────────────────
 function TodosView({ orders, isAdmin, onDeliver, onApprove, onRevision, onDetail }) {
   const [fv, setFv] = useState("Todos");
-  const fourOrders = orders.filter(o => o.type === "four" && (fv === "Todos" || o.vendedor === fv)).sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
-  const subOrders  = orders.filter(o => o.type === "sub"  && (fv === "Todos" || o.vendedor === fv)).sort((a, b) => {
-    const da = a.stage === "produccion" ? a.deadlineProduccion : a.deadlineDiseno;
-    const db = b.stage === "produccion" ? b.deadlineProduccion : b.deadlineDiseno;
-    if (!da) return 1; if (!db) return -1; return new Date(da) - new Date(db);
-  });
+  const sortByOrder = (a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || new Date(a.createdAt) - new Date(b.createdAt);
+  const fourOrders = orders.filter(o => o.type === "four" && (fv === "Todos" || o.vendedor === fv)).sort(sortByOrder);
+  const subOrders  = orders.filter(o => o.type === "sub"  && (fv === "Todos" || o.vendedor === fv)).sort(sortByOrder);
 
   return (
     <div>
@@ -2187,7 +2267,7 @@ function TodosView({ orders, isAdmin, onDeliver, onApprove, onRevision, onDetail
       </div>
       <Section title="Pedidos Four" count={fourOrders.length} accent="#3B82F6">
         {fourOrders.length === 0 ? <div style={S.emptyCard}>Sin Pedidos Four activos</div>
-          : fourOrders.map(o => <OrderCard key={o.id} order={o} accentColor="#3B82F6" isAdmin={isAdmin}
+          : fourOrders.map((o, i) => <OrderCard key={o.id} order={o} accentColor="#3B82F6" isAdmin={isAdmin} position={i + 1}
               onDetail={() => onDetail(o)}
               onDeliver={() => onDeliver(o.id, "four")}
               onRevision={isAdmin ? () => onRevision(o.id, "four") : null}
@@ -2195,7 +2275,7 @@ function TodosView({ orders, isAdmin, onDeliver, onApprove, onRevision, onDetail
       </Section>
       <Section title="Pedidos Sublimados" count={subOrders.length} accent="#7C3AED">
         {subOrders.length === 0 ? <div style={S.emptyCard}>Sin Pedidos Sublimados activos</div>
-          : subOrders.map(o => <OrderCard key={o.id} order={o} accentColor="#7C3AED" isAdmin={isAdmin}
+          : subOrders.map((o, i) => <OrderCard key={o.id} order={o} accentColor="#7C3AED" isAdmin={isAdmin} position={i + 1}
               onDetail={() => onDetail(o)}
               onDeliver={() => onDeliver(o.id, "sub")}
               onApprove={o.stage === "diseno" ? () => onApprove(o.id) : null}
