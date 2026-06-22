@@ -155,7 +155,10 @@ function calcDeadlineSubDiseno(fe, ho) {
   return addWorkdays(new Date(`${fe}T${ho}`), 5 + extraDay);
 }
 function calcDeadlineSubProduccion(at) { return addWorkdays(new Date(at), 20); }
-function fmtDate(d) { return new Date(d).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" }); }
+const CHILE_TZ = "America/Santiago";
+function chileDateStr(d = new Date()) { return new Intl.DateTimeFormat("en-CA", { timeZone: CHILE_TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(d); }
+function chileTimeStr(d = new Date()) { return new Intl.DateTimeFormat("en-GB", { timeZone: CHILE_TZ, hour: "2-digit", minute: "2-digit", hour12: false }).format(d); }
+function fmtDate(d) { return new Date(d).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric", timeZone: CHILE_TZ }); }
 function fmtCurrency(v) { return "$" + Number(v || 0).toLocaleString("es-CL"); }
 function dLeft(dl) {
   const t = new Date(); t.setHours(0, 0, 0, 0);
@@ -809,8 +812,8 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
 }
 
 // ─── NEW ORDER MODAL ──────────────────────────────────────────────────────────
-const todayStr = new Date().toISOString().split("T")[0];
-const nowStr   = new Date().toTimeString().slice(0, 5);
+const todayStr = chileDateStr();
+const nowStr   = chileTimeStr();
 const baseForm = { cliente: "", notaVenta: "", vendedor: SELLERS[0], deporte: SPORTS[0], cantidad: "", cantidadEstampados: "", valor: "", notas: "", files: [], filesNota: [], filesMaqueta: [], fechaEnvio: todayStr, horaEnvio: nowStr, express: false };
 
 function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, editOrder = null }) {
@@ -830,7 +833,7 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
     fechaEnvio: editOrder.fechaEnvio || todayStr,
     horaEnvio:  editOrder.horaEnvio  || nowStr,
     express:    editOrder.express    || false,
-  } : { ...baseForm });
+  } : { ...baseForm, fechaEnvio: chileDateStr(), horaEnvio: chileTimeStr() });
   const [saving, setSaving] = useState(false);
   const isEdit = !!editOrder;
 
@@ -1400,26 +1403,11 @@ export default function App() {
               )}
             </div>
 
-            {/* Falta Revisión — solo visible para admins en el nav, vendedores ven badge */}
-            {isAdmin ? (
-              <button onClick={() => setView("revision")}
-                style={{ ...S.navBtn, ...(view === "revision" ? S.navBtnActive : {}), ...(revisionCount > 0 ? { color: "#FCD34D" } : {}) }}>
-                FALTA REVISIÓN {revisionCount > 0 ? `(${revisionCount})` : ""}
-              </button>
-            ) : (
-              // Vendedor: solo ve badge si ALGUNO de sus pedidos está en revisión
-              (() => {
-                const myRevision = (data.revision || []).filter(o => o.vendedor === user.name);
-                return myRevision.length > 0 ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", background: "#78350F", borderRadius: 6 }}>
-                    <span style={{ fontSize: 16 }}>⚠️</span>
-                    <span style={{ fontSize: 10, fontWeight: 800, color: "#FCD34D", letterSpacing: "0.06em" }}>
-                      {myRevision.length} PEDIDO{myRevision.length > 1 ? "S" : ""} EN REVISIÓN
-                    </span>
-                  </div>
-                ) : null;
-              })()
-            )}
+            {/* Falta Revisión — visible para todos */}
+            <button onClick={() => setView("revision")}
+              style={{ ...S.navBtn, ...(view === "revision" ? S.navBtnActive : {}), ...(revisionCount > 0 ? { color: "#FCD34D" } : {}) }}>
+              FALTA REVISIÓN {revisionCount > 0 ? `(${revisionCount})` : ""}
+            </button>
 
             {/* Pedido Listo dropdown */}
             <div ref={listoRef} style={{ position: "relative" }}>
@@ -1483,7 +1471,7 @@ export default function App() {
                         <span style={{ fontSize: 13, fontWeight: 800, color: "#111827" }}>{n.titulo}</span>
                       </div>
                       {n.mensaje && <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.5, marginBottom: 4 }}>{n.mensaje}</div>}
-                      <div style={{ fontSize: 10, color: "#9CA3AF" }}>{new Date(n.created_at).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</div>
+                      <div style={{ fontSize: 10, color: "#9CA3AF" }}>{new Date(n.created_at).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: CHILE_TZ })}</div>
                     </div>
                   ))}
                 </div>
@@ -1615,7 +1603,7 @@ export default function App() {
             </>
           );
         })()}
-        {view === "revision"        && isAdmin && <RevisionView orders={data.revision || []} isAdmin={isAdmin} onRestore={restoreFromRevision} onMarkListo={id => setConfirm({ type: "rev", id, action: "deliver" })} onEdit={o => setEditOrder(o)} onDetail={o => setDetailOrder(o)} canEditOrders={user?.name?.toLowerCase().includes("genaro") || user?.email?.toLowerCase().includes("genaro")} />}
+        {view === "revision"        && <RevisionView orders={data.revision || []} isAdmin={isAdmin} onRestore={restoreFromRevision} onMarkListo={id => setConfirm({ type: "rev", id, action: "deliver" })} onEdit={o => setEditOrder(o)} onDetail={o => setDetailOrder(o)} canEditOrders={user?.name?.toLowerCase().includes("genaro") || user?.email?.toLowerCase().includes("genaro")} />}
         {view === "listo_pendiente" && <ListoPendienteView orders={data.listo || []} onEntregado={id => setConfirm({ type: "listo", id, action: "despachar" })} onDetail={o => setDetailOrder(o)} />}
         {view === "listo_entregado" && <ListoEntregadoView orders={data.delivered || []} onDetail={o => setDetailOrder(o)} />}
         {view === "usuarios"        && isAdmin && <UsuariosView currentUser={user} />}
@@ -1822,11 +1810,11 @@ function ChatWidget({ open, onOpen, onClose, messages, userName, input, setInput
 
   const fmtTime = ts => {
     const d = new Date(ts);
-    const today = new Date(); today.setHours(0,0,0,0);
-    const md = new Date(d); md.setHours(0,0,0,0);
-    const hora = d.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
-    if (md.getTime() === today.getTime()) return hora;
-    return `${d.toLocaleDateString("es-CL", { day: "2-digit", month: "short" })} ${hora}`;
+    const today = chileDateStr();
+    const md = chileDateStr(d);
+    const hora = d.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", timeZone: CHILE_TZ });
+    if (md === today) return hora;
+    return `${d.toLocaleDateString("es-CL", { day: "2-digit", month: "short", timeZone: CHILE_TZ })} ${hora}`;
   };
 
   if (!open) {
@@ -2505,14 +2493,12 @@ function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetai
                 </div>
               )}
             </div>
-            {isAdmin && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0, marginLeft: 12 }}>
-                <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
-                {canEditOrders && <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onEdit(o)}>✏ Editar</button>}
-                <button style={{ ...S.actionBtn, background: "#3B82F6", color: "#fff" }} onClick={() => onRestore(o.id)}>↩ Restaurar</button>
-                <button style={{ ...S.actionBtn, background: "#059669", color: "#fff" }} onClick={() => onMarkListo(o.id)}>✓ Marcar listo</button>
-              </div>
-            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0, marginLeft: 12 }}>
+              <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
+              {canEditOrders && <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onEdit(o)}>✏ Editar</button>}
+              <button style={{ ...S.actionBtn, background: "#3B82F6", color: "#fff" }} onClick={() => onRestore(o.id)}>↩ Restaurar</button>
+              <button style={{ ...S.actionBtn, background: "#059669", color: "#fff" }} onClick={() => onMarkListo(o.id)}>✓ Marcar listo</button>
+            </div>
           </div>
         ))
       }
@@ -2525,7 +2511,7 @@ function ListoPendienteView({ orders, onEntregado, onDetail }) {
   // Group by day (listoAt date)
   const grouped = {};
   [...orders].sort((a, b) => new Date(b.listoAt) - new Date(a.listoAt)).forEach(o => {
-    const key = o.listoAt ? new Date(o.listoAt).toLocaleDateString("es-CL", { day: "2-digit", month: "long", year: "numeric" }) : "Sin fecha";
+    const key = o.listoAt ? new Date(o.listoAt).toLocaleDateString("es-CL", { day: "2-digit", month: "long", year: "numeric", timeZone: CHILE_TZ }) : "Sin fecha";
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(o);
   });
