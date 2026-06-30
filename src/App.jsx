@@ -583,6 +583,10 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
   const isAdmin = currentUser?.role === "admin";
+  // Un vendedor solo puede editar SUS propios pedidos; los admins pueden editar cualquiera
+  const firstName = s => (s || "").trim().toLowerCase().split(/\s+/)[0];
+  const ownsOrder = !!(order.vendedor && currentUser?.name && firstName(order.vendedor) === firstName(currentUser.name));
+  const canEditThis = isAdmin || ownsOrder;
 
   const isFour = order.type === "four";
   const dl = isFour ? order.deadline : (order.stage === "produccion" ? order.deadlineProduccion : order.deadlineDiseno);
@@ -684,7 +688,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
                 ? <a href={f.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "#fff", background: color, textDecoration: "none", padding: "6px 14px", borderRadius: 6, whiteSpace: "nowrap" }}>↓ Descargar</a>
                 : <span style={{ fontSize: 11, color: "#9CA3AF", fontStyle: "italic" }}>sin URL</span>
               }
-              {editable && (isAdmin || canEdit) && (
+              {editable && (
                 <button onClick={() => removeFile(fileList, setFileList, f)} style={{ background: "#FEE2E2", border: "none", color: "#DC2626", borderRadius: 5, width: 28, height: 28, cursor: "pointer", fontWeight: 800, fontSize: 14, flexShrink: 0 }} title="Eliminar archivo">✕</button>
               )}
             </div>
@@ -828,18 +832,20 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
               </div>
             </div>
           ) : (
+            canEditThis ? (
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
               <button onClick={openEditInfo}
                 style={{ fontSize: 12, fontWeight: 700, color: "#0369A1", background: "#F0F9FF", border: "1px solid #BAE6FD", borderRadius: 6, padding: "5px 12px", cursor: "pointer" }}>
                 ✏ Editar pedido
               </button>
             </div>
+            ) : null
           )}
 
           {/* Files section */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: "#6B7280", letterSpacing: "0.1em", textTransform: "uppercase" }}>Archivos adjuntos</div>
-            {!editingFiles && (
+            {!editingFiles && canEditThis && (
               <button onClick={() => { setEditFiles(order.files || []); setEditFilesNota(order.filesNota || []); setEditingFiles(true); }}
                 style={{ fontSize: 12, fontWeight: 700, color: "#3B82F6", background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 6, padding: "5px 12px", cursor: "pointer" }}>
                 ✏ Editar archivos
