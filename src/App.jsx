@@ -125,6 +125,10 @@ async function loadMessages() {
     return [];
   }
 }
+function addActividad(order, usuario, accion) {
+  const entry = { t: new Date().toISOString(), u: usuario, a: accion };
+  return [...(order?.actividad || []), entry];
+}
 async function sendMessage(autor, texto) {
   try {
     const { error } = await supabase.from("mensajes").insert({ autor, texto });
@@ -134,6 +138,30 @@ async function sendMessage(autor, texto) {
     console.warn("Message send failed:", e);
     return false;
   }
+}
+async function loadPrivateMessages(myName) {
+  try {
+    const { data, error } = await supabase.from("mensajes_privados")
+      .select("*").or(`de.eq.${myName},para.eq.${myName}`).order("created_at", { ascending: true }).limit(500);
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.warn("Private messages load failed:", e);
+    return [];
+  }
+}
+async function sendPrivateMessage(de, para, texto) {
+  try {
+    const { error } = await supabase.from("mensajes_privados").insert({ de, para, texto });
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    console.warn("Private message send failed:", e);
+    return false;
+  }
+}
+async function markPrivateRead(myName, fromName) {
+  try { await supabase.from("mensajes_privados").update({ leida: true }).eq("para", myName).eq("de", fromName).eq("leida", false); } catch {}
 }
 
 // ─── DATE HELPERS ─────────────────────────────────────────────────────────────
@@ -160,6 +188,7 @@ function chileDateStr(d = new Date()) { return new Intl.DateTimeFormat("en-CA", 
 function chileTimeStr(d = new Date()) { return new Intl.DateTimeFormat("en-GB", { timeZone: CHILE_TZ, hour: "2-digit", minute: "2-digit", hour12: false }).format(d); }
 function fmtDate(d) { return new Date(d).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric", timeZone: CHILE_TZ }); }
 function fmtCurrency(v) { return "$" + Number(v || 0).toLocaleString("es-CL"); }
+function fmtDateTime(d) { const dd = chileDateStr(d); const [y, m, day] = dd.split("-"); return `${day}-${m}-${y} ${chileTimeStr(d)} hrs`; }
 function dLeft(dl) {
   const t = new Date(); t.setHours(0, 0, 0, 0);
   const d = new Date(dl); d.setHours(0, 0, 0, 0);
@@ -213,6 +242,7 @@ function rowToOrder(row) {
     filesNota:         row.files_nota || [],
     editedAt:          row.edited_at,
     sortOrder:         row.sort_order || 0,
+    actividad:         row.actividad || [],
     cantidadEstampados: row.cantidad_estampados,
     estampador:        row.estampador,
     filesMaqueta:      row.files_maqueta || [],
@@ -251,6 +281,7 @@ function orderToRow(o) {
     files_nota:          o.filesNota || [],
     edited_at:           o.editedAt || null,
     sort_order:          o.sortOrder || 0,
+    actividad:           o.actividad || [],
     cantidad_estampados: o.cantidadEstampados || null,
     estampador:          o.estampador || null,
     files_maqueta:       o.filesMaqueta || [],
@@ -448,6 +479,42 @@ function Section({ title, count, accent, children, defaultOpen = true }) {
 }
 
 // ─── ORDER CARD ───────────────────────────────────────────────────────────────
+function ActivityButton({ order, compact }) {
+  const [open, setOpen] = useState(false);
+  const acts = order.actividad || [];
+  return (
+    <>
+      <button style={{ ...S.actionBtn, background: "#EEF2FF", color: "#4F46E5", border: "1px solid #C7D2FE" }} onClick={() => setOpen(true)}>📋 Historial</button>
+      {open && (
+        <div style={S.overlay} onClick={e => e.target === e.currentTarget && setOpen(false)}>
+          <div style={{ ...S.confirmModal, maxWidth: 470 }}>
+            <div style={S.confirmTitle}>Historial del pedido</div>
+            <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 18, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.04em" }}>{order.cliente}</div>
+            {acts.length === 0 ? (
+              <div style={S.emptyCard}>Sin actividad registrada todavía. Las acciones nuevas se irán guardando aquí.</div>
+            ) : (
+              <div style={{ maxHeight: 420, overflowY: "auto" }}>
+                {[...acts].slice().reverse().map((a, i) => (
+                  <div key={i} style={{ display: "flex", gap: 12, padding: "11px 0", borderBottom: i < acts.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+                    <div style={{ width: 9, height: 9, borderRadius: "50%", background: "#4F46E5", marginTop: 5, flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, color: "#111827", fontWeight: 600, lineHeight: 1.4 }}>{a.a}</div>
+                      <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>{fmtDateTime(a.t)} · <span style={{ fontWeight: 700 }}>{a.u}</span></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={S.confirmBtns}>
+              <button style={S.btnGhost} onClick={() => setOpen(false)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDetail, onDelete, isAdmin, position }) {
   const isFour = order.type === "four";
   const dl = isFour ? order.deadline : (order.stage === "produccion" ? order.deadlineProduccion : order.deadlineDiseno);
@@ -485,6 +552,7 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDet
           {onDetail && (
             <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={onDetail}>🔍 Detalle</button>
           )}
+          <ActivityButton order={order} />
           {isAdmin && onRevision && (
             <button style={{ ...S.actionBtn, background: "#F59E0B", color: "#fff" }} onClick={onRevision}>⚠ Revisión</button>
           )}
@@ -547,7 +615,8 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
       patches.stage = "diseno";
       patches.deadline = null;
     }
-    const updated = { ...order, ...patches };
+    const nuevaActividad = addActividad(order, currentUser?.name || "Usuario", "Editó la información del pedido");
+    const updated = { ...order, ...patches, actividad: nuevaActividad };
     await supabase.from("pedidos").update({
       cliente:    patches.cliente,
       nota_venta: patches.notaVenta || null,
@@ -562,6 +631,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
       stage:      patches.stage || null,
       deadline:   patches.deadline || null,
       deadline_diseno: patches.deadlineDiseno || null,
+      actividad:  nuevaActividad,
     }).eq("id", order.id);
     setOrder(updated);
     if (onSaveFiles) onSaveFiles(updated);
@@ -571,8 +641,9 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
 
   const saveFiles = async () => {
     setSaving(true);
-    const updated = { ...order, files: editFiles, filesNota: editFilesNota };
-    await supabase.from("pedidos").update({ files: editFiles, files_nota: editFilesNota }).eq("id", order.id);
+    const nuevaActividad = addActividad(order, currentUser?.name || "Usuario", "Modificó los archivos adjuntos");
+    const updated = { ...order, files: editFiles, filesNota: editFilesNota, actividad: nuevaActividad };
+    await supabase.from("pedidos").update({ files: editFiles, files_nota: editFilesNota, actividad: nuevaActividad }).eq("id", order.id);
     setOrder(updated);
     if (onSaveFiles) onSaveFiles(updated);
     setEditingFiles(false);
@@ -1085,6 +1156,8 @@ export default function App() {
   const [chatOpen, setChatOpen]       = useState(false);
   const [messages, setMessages]       = useState([]);
   const [chatInput, setChatInput]     = useState("");
+  const [privMessages, setPrivMessages] = useState([]);
+  const [allUsers, setAllUsers]       = useState([]);
   const [showPassModal, setShowPassModal] = useState(false);
   const [lastSeenChat, setLastSeenChat] = useState(() => {
     try { return localStorage.getItem("fs_last_chat") || null; } catch { return null; }
@@ -1160,6 +1233,20 @@ export default function App() {
     return () => { supabase.removeChannel(ch); };
   }, [user?.name]);
 
+  // Chat privado: cargar mensajes + lista de usuarios + realtime
+  useEffect(() => {
+    if (!user?.name) return;
+    loadPrivateMessages(user.name).then(setPrivMessages);
+    loadUsersFromSupabase().then(setAllUsers);
+    const ch = supabase
+      .channel("priv-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "mensajes_privados" }, () => {
+        loadPrivateMessages(user.name).then(setPrivMessages);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user?.name]);
+
   const handleLogin = (u) => {
     setUser(u);
     try { sessionStorage.setItem("fs_user", JSON.stringify(u)); } catch {}
@@ -1185,6 +1272,17 @@ export default function App() {
 
   const unreadChat = messages.filter(m => m.autor !== user?.name && (!lastSeenChat || new Date(m.created_at) > new Date(lastSeenChat))).length;
 
+  const handleSendPrivate = async (para, texto) => {
+    const txt = (texto || "").trim();
+    if (!txt || !para || !user?.name) return;
+    await sendPrivateMessage(user.name, para, txt);
+    loadPrivateMessages(user.name).then(setPrivMessages);
+  };
+  const handleOpenConversation = (otherName) => {
+    markPrivateRead(user.name, otherName).then(() => loadPrivateMessages(user.name).then(setPrivMessages));
+  };
+  const unreadPrivate = privMessages.filter(m => m.para === user?.name && !m.leida).length;
+
   const persist = useCallback(async (nd, changedOrders = []) => {
     setData(nd);
     saveData(nd); // local backup
@@ -1198,12 +1296,14 @@ export default function App() {
   const addFour = f => {
     const dl = calcDeadlineFour(f.fechaEnvio, f.horaEnvio, f.express);
     const newOrder = { id: Date.now() + "", type: "four", ...f, cantidad: +f.cantidad, valor: +f.valor, deadline: dl.toISOString(), createdAt: new Date().toISOString(), status: "active" };
+    newOrder.actividad = addActividad(newOrder, f.vendedor || user.name, "Ingresó el pedido");
     const newData = { ...data, four: [newOrder, ...data.four] };
     persist(newData, [newOrder]);
   };
   const addSub = f => {
     const dd = calcDeadlineSubDiseno(f.fechaEnvio, f.horaEnvio);
     const newOrder = { id: Date.now() + "", type: "sub", ...f, cantidad: +f.cantidad, valor: +f.valor, deadlineDiseno: dd.toISOString(), deadlineProduccion: null, approvedAt: null, stage: "diseno", createdAt: new Date().toISOString(), status: "active" };
+    newOrder.actividad = addActividad(newOrder, f.vendedor || user.name, "Ingresó el pedido");
     const newData = { ...data, sub: [newOrder, ...data.sub] };
     persist(newData, [newOrder]);
   };
@@ -1211,7 +1311,7 @@ export default function App() {
     const now = new Date().toISOString();
     const updatedOrder = data.sub.find(o => o.id === id);
     if (!updatedOrder) return;
-    const patched = { ...updatedOrder, stage: "produccion", approvedAt: now, deadlineProduccion: calcDeadlineSubProduccion(now).toISOString(), status: "active" };
+    const patched = { ...updatedOrder, stage: "produccion", approvedAt: now, deadlineProduccion: calcDeadlineSubProduccion(now).toISOString(), status: "active", actividad: addActividad(updatedOrder, user.name, "Aprobó el diseño y pasó a producción") };
     persist({ ...data, sub: data.sub.map(o => o.id === id ? patched : o) }, [patched]);
     setConfirm(null);
   };
@@ -1225,7 +1325,7 @@ export default function App() {
     if (paths.length > 0) {
       try { await supabase.storage.from("archivos").remove(paths); } catch (e) { console.warn("No se pudieron borrar archivos:", e); }
     }
-    const updated = { ...order, listoAt: new Date().toISOString(), status: "listo", estampador: estampador || order.estampador || null, files: [], filesMaqueta: [], filesNota: [] };
+    const updated = { ...order, listoAt: new Date().toISOString(), status: "listo", estampador: estampador || order.estampador || null, files: [], filesMaqueta: [], filesNota: [], actividad: addActividad(order, user.name, `Marcó como listo${estampador ? " (estampador: " + estampador + ")" : ""}`) };
     const newData = {
       ...data,
       four: data.four.filter(o => o.id !== id),
@@ -1239,7 +1339,7 @@ export default function App() {
   const despachar = (id) => {
     const order = (data.listo || []).find(o => o.id === id);
     if (!order) return;
-    const updated = { ...order, deliveredAt: new Date().toISOString(), despachador: user.name, status: "delivered" };
+    const updated = { ...order, deliveredAt: new Date().toISOString(), despachador: user.name, status: "delivered", actividad: addActividad(order, user.name, "Marcó como entregado") };
     persist({
       ...data,
       listo: (data.listo || []).filter(o => o.id !== id),
@@ -1251,7 +1351,7 @@ export default function App() {
     const list = type === "four" ? data.four : data.sub;
     const order = list.find(o => o.id === id);
     if (!order) return;
-    const updated = { ...order, revisionAt: new Date().toISOString(), revisionRazon: razon.trim(), revisionBy: user.name, status: "revision" };
+    const updated = { ...order, revisionAt: new Date().toISOString(), revisionRazon: razon.trim(), revisionBy: user.name, status: "revision", actividad: addActividad(order, user.name, `Envió a revisión${razon.trim() ? ": " + razon.trim() : ""}`) };
     persist({
       ...data,
       four: data.four.filter(o => o.id !== id),
@@ -1271,7 +1371,7 @@ export default function App() {
   const restoreFromRevision = id => {
     const order = data.revision.find(o => o.id === id);
     if (!order) return;
-    const updated = { ...order, status: "active", revisionAt: null, revisionRazon: null, revisionBy: null };
+    const updated = { ...order, status: "active", revisionAt: null, revisionRazon: null, revisionBy: null, actividad: addActividad(order, user.name, "Restauró el pedido desde revisión") };
     const newData = { ...data, revision: data.revision.filter(o => o.id !== id) };
     if (order.type === "four") {
       // Reinsert in original position by createdAt
@@ -1290,7 +1390,8 @@ export default function App() {
     } else {
       patches.deadlineDiseno = calcDeadlineSubDiseno(updated.fechaEnvio, updated.horaEnvio).toISOString();
     }
-    const patched = { ...(data.revision.find(o => o.id === id) || {}), ...patches, status: "revision" };
+    const _orig = data.revision.find(o => o.id === id) || {};
+    const patched = { ...(_orig), ...patches, status: "revision", actividad: addActividad(_orig, user.name, "Editó el pedido") };
     persist({
       ...data,
       revision: data.revision.map(o => o.id === id ? patched : o),
@@ -1725,7 +1826,12 @@ export default function App() {
         input={chatInput}
         setInput={setChatInput}
         onSend={handleSendMessage}
-        unread={unreadChat}
+        unread={unreadChat + unreadPrivate}
+        privMessages={privMessages}
+        allUsers={allUsers}
+        onSendPrivate={handleSendPrivate}
+        onOpenConversation={handleOpenConversation}
+        unreadPrivate={unreadPrivate}
       />
     </div>
   );
@@ -1800,13 +1906,16 @@ function ChangePasswordModal({ user, onClose, onChanged }) {
 // ─── CHAT WIDGET ──────────────────────────────────────────────────────────────
 const EMOJIS = ["👍","👌","🙌","🔥","✅","❌","⚠️","🎨","👕","⚡","🙏","😅","😂","😉","💪","👀","📌","🕐"];
 
-function ChatWidget({ open, onOpen, onClose, messages, userName, input, setInput, onSend, unread }) {
+function ChatWidget({ open, onOpen, onClose, messages, userName, input, setInput, onSend, unread, privMessages, allUsers, onSendPrivate, onOpenConversation, unreadPrivate }) {
   const scrollRef = useRef(null);
   const [showEmojis, setShowEmojis] = useState(false);
+  const [tab, setTab] = useState("grupal"); // grupal | privado
+  const [activeChat, setActiveChat] = useState(null); // nombre del usuario con quien chateo
+  const [privInput, setPrivInput] = useState("");
 
   useEffect(() => {
     if (open && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [open, messages.length]);
+  }, [open, messages.length, privMessages?.length, activeChat, tab]);
 
   const fmtTime = ts => {
     const d = new Date(ts);
@@ -1830,7 +1939,7 @@ function ChatWidget({ open, onOpen, onClose, messages, userName, input, setInput
         padding: "12px 28px", borderRadius: "14px 14px 0 0",
       }}>
         <span style={{ fontSize: 18 }}>💬</span>
-        Chat grupal
+        Chat
         {unread > 0 && (
           <span style={{ background: "#EF4444", color: "#fff", fontSize: 11, fontWeight: 800, minWidth: 20, height: 20, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 6px" }}>
             {unread}
@@ -1840,10 +1949,61 @@ function ChatWidget({ open, onOpen, onClose, messages, userName, input, setInput
     );
   }
 
+  // Mensajes de la conversación privada activa
+  const convMessages = activeChat
+    ? (privMessages || []).filter(m => (m.de === userName && m.para === activeChat) || (m.de === activeChat && m.para === userName))
+    : [];
+
+  // Lista de contactos (todos menos yo), con conteo de no leídos
+  const contactos = (allUsers || [])
+    .filter(u => u.name && u.name !== userName)
+    .map(u => ({
+      name: u.name,
+      noLeidos: (privMessages || []).filter(m => m.de === u.name && m.para === userName && !m.leida).length,
+      ultimo: (privMessages || []).filter(m => m.de === u.name || m.para === u.name).slice(-1)[0],
+    }))
+    .sort((a, b) => b.noLeidos - a.noLeidos || (b.ultimo ? new Date(b.ultimo.created_at) : 0) - (a.ultimo ? new Date(a.ultimo.created_at) : 0));
+
+  const sendPriv = () => {
+    if (!privInput.trim() || !activeChat) return;
+    onSendPrivate(activeChat, privInput);
+    setPrivInput("");
+    setShowEmojis(false);
+  };
+
+  const TabBtn = ({ id, label, badge }) => (
+    <button onClick={() => { setTab(id); setActiveChat(null); }} style={{
+      flex: 1, padding: "10px", border: "none", cursor: "pointer",
+      background: tab === id ? "#fff" : "transparent",
+      color: tab === id ? "#111827" : "#9CA3AF",
+      fontWeight: 800, fontSize: 12, letterSpacing: "0.04em", textTransform: "uppercase",
+      fontFamily: "Montserrat, sans-serif", borderBottom: tab === id ? "2px solid #111827" : "2px solid transparent",
+      display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+    }}>
+      {label}
+      {badge > 0 && <span style={{ background: "#EF4444", color: "#fff", fontSize: 10, fontWeight: 800, minWidth: 16, height: 16, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{badge}</span>}
+    </button>
+  );
+
+  const Burbuja = ({ mine, autor, texto, ts }) => (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start" }}>
+      {!mine && autor && <span style={{ fontSize: 10, fontWeight: 800, color: "#6B7280", marginBottom: 2, marginLeft: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>{autor}</span>}
+      <div style={{
+        maxWidth: "78%", padding: "9px 13px", borderRadius: 14,
+        background: mine ? "#111827" : "#fff",
+        color: mine ? "#fff" : "#111827",
+        border: mine ? "none" : "1px solid #E5E7EB",
+        fontSize: 14, lineHeight: 1.4, wordBreak: "break-word",
+        borderBottomRightRadius: mine ? 4 : 14, borderBottomLeftRadius: mine ? 14 : 4,
+      }}>{texto}</div>
+      <span style={{ fontSize: 9, color: "#9CA3AF", marginTop: 3, marginLeft: mine ? 0 : 6, marginRight: mine ? 6 : 0 }}>{fmtTime(ts)}</span>
+    </div>
+  );
+
   return (
     <div style={{
       position: "fixed", bottom: 28, right: 28, zIndex: 400,
-      width: 380, maxWidth: "calc(100vw - 32px)", height: 540, maxHeight: "calc(100vh - 100px)",
+      width: 380, maxWidth: "calc(100vw - 32px)", height: 560, maxHeight: "calc(100vh - 100px)",
       background: "#fff", borderRadius: 18, boxShadow: "0 16px 48px rgba(0,0,0,0.28)",
       display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid #E5E7EB",
     }}>
@@ -1852,64 +2012,87 @@ function ChatWidget({ open, onOpen, onClose, messages, userName, input, setInput
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 20 }}>💬</span>
           <div>
-            <div style={{ fontFamily: "NikeFutura, Montserrat, sans-serif", fontSize: 15, fontWeight: 900, color: "#39FF14", letterSpacing: "0.08em", textShadow: "0 0 10px #39FF1466" }}>CHAT EQUIPO</div>
-            <div style={{ fontSize: 10, color: "#9CA3AF" }}>Four Sport</div>
+            <div style={{ fontFamily: "NikeFutura, Montserrat, sans-serif", fontSize: 15, fontWeight: 900, color: "#39FF14", letterSpacing: "0.08em", textShadow: "0 0 10px #39FF1466" }}>CHAT FOUR SPORT</div>
+            <div style={{ fontSize: 10, color: "#9CA3AF" }}>{tab === "grupal" ? "Canal del equipo" : (activeChat ? `Con ${activeChat}` : "Mensajes privados")}</div>
           </div>
         </div>
         <button onClick={onClose} style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 16 }}>✕</button>
       </div>
 
-      {/* Mensajes */}
-      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "16px", background: "#F9FAFB", display: "flex", flexDirection: "column", gap: 10 }}>
-        {messages.length === 0 ? (
-          <div style={{ textAlign: "center", color: "#D1D5DB", fontSize: 13, marginTop: 40 }}>
-            Aún no hay mensajes.<br />¡Escribe el primero! 👋
-          </div>
-        ) : messages.map(m => {
-          const mine = m.autor === userName;
-          return (
-            <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start" }}>
-              {!mine && <span style={{ fontSize: 10, fontWeight: 800, color: "#6B7280", marginBottom: 2, marginLeft: 6, textTransform: "uppercase", letterSpacing: "0.04em" }}>{m.autor}</span>}
-              <div style={{
-                maxWidth: "78%", padding: "9px 13px", borderRadius: 14,
-                background: mine ? "#111827" : "#fff",
-                color: mine ? "#fff" : "#111827",
-                border: mine ? "none" : "1px solid #E5E7EB",
-                fontSize: 14, lineHeight: 1.4, wordBreak: "break-word",
-                borderBottomRightRadius: mine ? 4 : 14, borderBottomLeftRadius: mine ? 14 : 4,
-              }}>
-                {m.texto}
-              </div>
-              <span style={{ fontSize: 9, color: "#9CA3AF", marginTop: 3, marginLeft: mine ? 0 : 6, marginRight: mine ? 6 : 0 }}>{fmtTime(m.created_at)}</span>
-            </div>
-          );
-        })}
+      {/* Tabs */}
+      <div style={{ display: "flex", background: "#F3F4F6", borderBottom: "1px solid #E5E7EB" }}>
+        <TabBtn id="grupal" label="Grupal" badge={unread} />
+        <TabBtn id="privado" label="Privado" badge={unreadPrivate} />
       </div>
 
-      {/* Emoji picker */}
-      {showEmojis && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "8px 12px", background: "#F3F4F6", borderTop: "1px solid #E5E7EB" }}>
-          {EMOJIS.map(em => (
-            <button key={em} onClick={() => { setInput(input + em); }} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", padding: 2, lineHeight: 1 }}>{em}</button>
+      {/* CONTENIDO GRUPAL */}
+      {tab === "grupal" && (
+        <>
+          <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "16px", background: "#F9FAFB", display: "flex", flexDirection: "column", gap: 10 }}>
+            {messages.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#D1D5DB", fontSize: 13, marginTop: 40 }}>Aún no hay mensajes.<br />¡Escribe el primero! 👋</div>
+            ) : messages.map(m => <Burbuja key={m.id} mine={m.autor === userName} autor={m.autor} texto={m.texto} ts={m.created_at} />)}
+          </div>
+          {showEmojis && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "8px 12px", background: "#F3F4F6", borderTop: "1px solid #E5E7EB" }}>
+              {EMOJIS.map(em => <button key={em} onClick={() => setInput(input + em)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", padding: 2, lineHeight: 1 }}>{em}</button>)}
+            </div>
+          )}
+          <div style={{ padding: "12px", borderTop: "1px solid #E5E7EB", background: "#fff", display: "flex", alignItems: "center", gap: 8 }}>
+            <button onClick={() => setShowEmojis(s => !s)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", padding: 4, lineHeight: 1 }}>😊</button>
+            <input value={input} onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); setShowEmojis(false); } }}
+              placeholder="Escribe un mensaje..."
+              style={{ flex: 1, padding: "10px 14px", borderRadius: 20, border: "1px solid #E5E7EB", fontSize: 14, outline: "none", fontFamily: "Montserrat, sans-serif", background: "#F9FAFB" }} />
+            <button onClick={() => { onSend(); setShowEmojis(false); }} disabled={!input.trim()}
+              style={{ background: input.trim() ? "#111827" : "#E5E7EB", color: input.trim() ? "#39FF14" : "#9CA3AF", border: "none", borderRadius: "50%", width: 40, height: 40, cursor: input.trim() ? "pointer" : "default", fontSize: 16, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>➤</button>
+          </div>
+        </>
+      )}
+
+      {/* CONTENIDO PRIVADO */}
+      {tab === "privado" && !activeChat && (
+        <div style={{ flex: 1, overflowY: "auto", background: "#fff" }}>
+          {contactos.length === 0 ? (
+            <div style={{ textAlign: "center", color: "#D1D5DB", fontSize: 13, marginTop: 40 }}>No hay otros usuarios.</div>
+          ) : contactos.map(c => (
+            <button key={c.name} onClick={() => { setActiveChat(c.name); onOpenConversation(c.name); }}
+              style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "14px 18px", border: "none", borderBottom: "1px solid #F3F4F6", background: "#fff", cursor: "pointer", textAlign: "left" }}>
+              <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#111827", color: "#39FF14", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 16, flexShrink: 0 }}>{c.name.charAt(0).toUpperCase()}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{c.name}</div>
+                {c.ultimo && <div style={{ fontSize: 12, color: "#9CA3AF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.ultimo.de === userName ? "Tú: " : ""}{c.ultimo.texto}</div>}
+              </div>
+              {c.noLeidos > 0 && <span style={{ background: "#EF4444", color: "#fff", fontSize: 10, fontWeight: 800, minWidth: 18, height: 18, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>{c.noLeidos}</span>}
+            </button>
           ))}
         </div>
       )}
 
-      {/* Input */}
-      <div style={{ padding: "12px", borderTop: "1px solid #E5E7EB", background: "#fff", display: "flex", alignItems: "center", gap: 8 }}>
-        <button onClick={() => setShowEmojis(s => !s)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", padding: 4, lineHeight: 1 }}>😊</button>
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); setShowEmojis(false); } }}
-          placeholder="Escribe un mensaje..."
-          style={{ flex: 1, padding: "10px 14px", borderRadius: 20, border: "1px solid #E5E7EB", fontSize: 14, outline: "none", fontFamily: "Montserrat, sans-serif", background: "#F9FAFB" }}
-        />
-        <button onClick={() => { onSend(); setShowEmojis(false); }} disabled={!input.trim()}
-          style={{ background: input.trim() ? "#111827" : "#E5E7EB", color: input.trim() ? "#39FF14" : "#9CA3AF", border: "none", borderRadius: "50%", width: 40, height: 40, cursor: input.trim() ? "pointer" : "default", fontSize: 16, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          ➤
-        </button>
-      </div>
+      {tab === "privado" && activeChat && (
+        <>
+          <button onClick={() => setActiveChat(null)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", background: "#F9FAFB", border: "none", borderBottom: "1px solid #E5E7EB", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#6B7280" }}>← Volver a contactos</button>
+          <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "16px", background: "#F9FAFB", display: "flex", flexDirection: "column", gap: 10 }}>
+            {convMessages.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#D1D5DB", fontSize: 13, marginTop: 40 }}>Inicia la conversación con {activeChat} 👋</div>
+            ) : convMessages.map(m => <Burbuja key={m.id} mine={m.de === userName} autor={null} texto={m.texto} ts={m.created_at} />)}
+          </div>
+          {showEmojis && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: "8px 12px", background: "#F3F4F6", borderTop: "1px solid #E5E7EB" }}>
+              {EMOJIS.map(em => <button key={em} onClick={() => setPrivInput(privInput + em)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", padding: 2, lineHeight: 1 }}>{em}</button>)}
+            </div>
+          )}
+          <div style={{ padding: "12px", borderTop: "1px solid #E5E7EB", background: "#fff", display: "flex", alignItems: "center", gap: 8 }}>
+            <button onClick={() => setShowEmojis(s => !s)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", padding: 4, lineHeight: 1 }}>😊</button>
+            <input value={privInput} onChange={e => setPrivInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendPriv(); } }}
+              placeholder={`Mensaje para ${activeChat}...`}
+              style={{ flex: 1, padding: "10px 14px", borderRadius: 20, border: "1px solid #E5E7EB", fontSize: 14, outline: "none", fontFamily: "Montserrat, sans-serif", background: "#F9FAFB" }} />
+            <button onClick={sendPriv} disabled={!privInput.trim()}
+              style={{ background: privInput.trim() ? "#111827" : "#E5E7EB", color: privInput.trim() ? "#39FF14" : "#9CA3AF", border: "none", borderRadius: "50%", width: 40, height: 40, cursor: privInput.trim() ? "pointer" : "default", fontSize: 16, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>➤</button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -2495,6 +2678,7 @@ function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetai
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0, marginLeft: 12 }}>
               <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
+              <ActivityButton order={o} />
               {canEditOrders && <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onEdit(o)}>✏ Editar</button>}
               <button style={{ ...S.actionBtn, background: "#3B82F6", color: "#fff" }} onClick={() => onRestore(o.id)}>↩ Restaurar</button>
               <button style={{ ...S.actionBtn, background: "#059669", color: "#fff" }} onClick={() => onMarkListo(o.id)}>✓ Marcar listo</button>
