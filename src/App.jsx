@@ -184,8 +184,8 @@ function calcDeadlineSubDiseno(fe, ho) {
 }
 function calcDeadlineSubProduccion(at) { return addWorkdays(new Date(at), 20); }
 const CHILE_TZ = "America/Santiago";
-function chileDateStr(d = new Date()) { return new Intl.DateTimeFormat("en-CA", { timeZone: CHILE_TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(d); }
-function chileTimeStr(d = new Date()) { return new Intl.DateTimeFormat("en-GB", { timeZone: CHILE_TZ, hour: "2-digit", minute: "2-digit", hour12: false }).format(d); }
+function chileDateStr(d = new Date()) { return new Intl.DateTimeFormat("en-CA", { timeZone: CHILE_TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(d)); }
+function chileTimeStr(d = new Date()) { return new Intl.DateTimeFormat("en-GB", { timeZone: CHILE_TZ, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(d)); }
 function fmtDate(d) { return new Date(d).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric", timeZone: CHILE_TZ }); }
 function fmtCurrency(v) { return "$" + Number(v || 0).toLocaleString("es-CL"); }
 function fmtDateTime(d) { const dd = chileDateStr(d); const [y, m, day] = dd.split("-"); return `${day}-${m}-${y} ${chileTimeStr(d)} hrs`; }
