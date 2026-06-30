@@ -1296,16 +1296,18 @@ export default function App() {
 
   const addFour = f => {
     const dl = calcDeadlineFour(f.fechaEnvio, f.horaEnvio, f.express);
-    const newOrder = { id: Date.now() + "", type: "four", ...f, cantidad: +f.cantidad, valor: +f.valor, deadline: dl.toISOString(), createdAt: new Date().toISOString(), status: "active" };
+    const maxOrder = data.four.reduce((m, o) => Math.max(m, o.sortOrder || 0), 0);
+    const newOrder = { id: Date.now() + "", type: "four", ...f, cantidad: +f.cantidad, valor: +f.valor, deadline: dl.toISOString(), createdAt: new Date().toISOString(), status: "active", sortOrder: maxOrder + 1 };
     newOrder.actividad = addActividad(newOrder, f.vendedor || user.name, "Ingresó el pedido");
-    const newData = { ...data, four: [newOrder, ...data.four] };
+    const newData = { ...data, four: [...data.four, newOrder] };
     persist(newData, [newOrder]);
   };
   const addSub = f => {
     const dd = calcDeadlineSubDiseno(f.fechaEnvio, f.horaEnvio);
-    const newOrder = { id: Date.now() + "", type: "sub", ...f, cantidad: +f.cantidad, valor: +f.valor, deadlineDiseno: dd.toISOString(), deadlineProduccion: null, approvedAt: null, stage: "diseno", createdAt: new Date().toISOString(), status: "active" };
+    const maxOrder = data.sub.reduce((m, o) => Math.max(m, o.sortOrder || 0), 0);
+    const newOrder = { id: Date.now() + "", type: "sub", ...f, cantidad: +f.cantidad, valor: +f.valor, deadlineDiseno: dd.toISOString(), deadlineProduccion: null, approvedAt: null, stage: "diseno", createdAt: new Date().toISOString(), status: "active", sortOrder: maxOrder + 1 };
     newOrder.actividad = addActividad(newOrder, f.vendedor || user.name, "Ingresó el pedido");
-    const newData = { ...data, sub: [newOrder, ...data.sub] };
+    const newData = { ...data, sub: [...data.sub, newOrder] };
     persist(newData, [newOrder]);
   };
   const approveSubDesign = id => {
