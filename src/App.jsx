@@ -482,6 +482,11 @@ function Section({ title, count, accent, children, defaultOpen = true }) {
 function ActivityButton({ order, compact }) {
   const [open, setOpen] = useState(false);
   const acts = order.actividad || [];
+  // Asegurar que el ingreso del pedido siempre sea el primer hito
+  const hasIngreso = acts.some(a => (a.a || "").toLowerCase().includes("ingres"));
+  const display = (hasIngreso ? [...acts] : [{ t: order.createdAt, u: order.vendedor || "—", a: "Ingresó el pedido" }, ...acts])
+    .slice()
+    .sort((a, b) => new Date(a.t) - new Date(b.t)); // cronológico: ingreso arriba
   return (
     <>
       <button style={{ ...S.actionBtn, background: "#EEF2FF", color: "#4F46E5", border: "1px solid #C7D2FE" }} onClick={() => setOpen(true)}>📋 Historial</button>
@@ -490,21 +495,17 @@ function ActivityButton({ order, compact }) {
           <div style={{ ...S.confirmModal, maxWidth: 470 }}>
             <div style={S.confirmTitle}>Historial del pedido</div>
             <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 18, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.04em" }}>{order.cliente}</div>
-            {acts.length === 0 ? (
-              <div style={S.emptyCard}>Sin actividad registrada todavía. Las acciones nuevas se irán guardando aquí.</div>
-            ) : (
-              <div style={{ maxHeight: 420, overflowY: "auto" }}>
-                {[...acts].slice().reverse().map((a, i) => (
-                  <div key={i} style={{ display: "flex", gap: 12, padding: "11px 0", borderBottom: i < acts.length - 1 ? "1px solid #F3F4F6" : "none" }}>
-                    <div style={{ width: 9, height: 9, borderRadius: "50%", background: "#4F46E5", marginTop: 5, flexShrink: 0 }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, color: "#111827", fontWeight: 600, lineHeight: 1.4 }}>{a.a}</div>
-                      <div style={{ fontSize: 12, color: "#9CA3AF", marginTop: 3 }}>{fmtDateTime(a.t)} · <span style={{ fontWeight: 700 }}>{a.u}</span></div>
-                    </div>
+            <div style={{ maxHeight: 420, overflowY: "auto" }}>
+              {display.map((a, i) => (
+                <div key={i} style={{ display: "flex", gap: 12, padding: "11px 0", borderBottom: i < display.length - 1 ? "1px solid #F3F4F6" : "none" }}>
+                  <div style={{ width: 9, height: 9, borderRadius: "50%", background: i === 0 ? "#15803D" : "#4F46E5", marginTop: 6, flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, color: "#111827", fontWeight: 600, lineHeight: 1.4 }}>{a.a}</div>
+                    <div style={{ fontSize: 13, color: "#15803D", fontWeight: 800, marginTop: 3 }}>{fmtDateTime(a.t)} <span style={{ color: "#6B7280", fontWeight: 600 }}>· {a.u}</span></div>
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              ))}
+            </div>
             <div style={S.confirmBtns}>
               <button style={S.btnGhost} onClick={() => setOpen(false)}>Cerrar</button>
             </div>
