@@ -620,7 +620,20 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
       patches.stage = "diseno";
       patches.deadline = null;
     }
-    const nuevaActividad = addActividad(order, currentUser?.name || "Usuario", "Editó la información del pedido");
+    // Detectar qué campos cambiaron para registrarlo específicamente
+    const cambios = [];
+    if ((editForm.cliente || "") !== (order.cliente || "")) cambios.push(`cliente: "${order.cliente || "—"}" → "${editForm.cliente || "—"}"`);
+    if ((editForm.notaVenta || "") !== (order.notaVenta || "")) cambios.push(`nota de venta: "${order.notaVenta || "—"}" → "${editForm.notaVenta || "—"}"`);
+    if (+editForm.cantidad !== order.cantidad) cambios.push(`cantidad de prendas: ${order.cantidad} → ${editForm.cantidad}`);
+    if (editForm.type === "four" && (editForm.cantidadEstampados ? +editForm.cantidadEstampados : 0) !== (order.cantidadEstampados || 0)) cambios.push(`estampados: ${order.cantidadEstampados || 0} → ${editForm.cantidadEstampados || 0}`);
+    if (+editForm.valor !== order.valor) cambios.push(`valor: ${fmtCurrency(order.valor)} → ${fmtCurrency(editForm.valor)}`);
+    if ((editForm.deporte || "") !== (order.deporte || "")) cambios.push(`deporte: ${order.deporte || "—"} → ${editForm.deporte}`);
+    if ((editForm.vendedor || "") !== (order.vendedor || "")) cambios.push(`vendedor: ${order.vendedor || "—"} → ${editForm.vendedor}`);
+    if ((editForm.notas || "") !== (order.notas || "")) cambios.push("actualizó las notas/comentarios");
+    if (editForm.type !== order.type) cambios.push(`tipo: ${order.type === "four" ? "Four" : "Sublimado"} → ${editForm.type === "four" ? "Four" : "Sublimado"}`);
+    if (!!editForm.express !== !!order.express) cambios.push(`entrega: ${order.express ? "Express" : "Normal"} → ${editForm.express ? "Express" : "Normal"}`);
+    const accionTexto = cambios.length ? `Editó el pedido — ${cambios.join("; ")}` : "Guardó el pedido sin cambios";
+    const nuevaActividad = addActividad(order, currentUser?.name || "Usuario", accionTexto);
     const updated = { ...order, ...patches, actividad: nuevaActividad };
     await supabase.from("pedidos").update({
       cliente:    patches.cliente,
@@ -646,7 +659,24 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
 
   const saveFiles = async () => {
     setSaving(true);
-    const nuevaActividad = addActividad(order, currentUser?.name || "Usuario", "Modificó los archivos adjuntos");
+    // Detectar cambios por categoría (logos/números y nota de venta)
+    const diff = (antes, despues) => {
+      const idsAntes = new Set((antes || []).map(x => x.id));
+      const idsDespues = new Set((despues || []).map(x => x.id));
+      return {
+        agregados: (despues || []).filter(x => !idsAntes.has(x.id)),
+        eliminados: (antes || []).filter(x => !idsDespues.has(x.id)),
+      };
+    };
+    const detalles = [];
+    const dLogos = diff(order.files, editFiles);
+    dLogos.agregados.forEach(f => detalles.push(`agregó el archivo de logos/números "${f.name}"`));
+    dLogos.eliminados.forEach(f => detalles.push(`eliminó el archivo de logos/números "${f.name}"`));
+    const dNota = diff(order.filesNota, editFilesNota);
+    dNota.agregados.forEach(f => detalles.push(`agregó el archivo de nota de venta "${f.name}"`));
+    dNota.eliminados.forEach(f => detalles.push(`eliminó el archivo de nota de venta "${f.name}"`));
+    const accionTexto = detalles.length ? `Archivos: ${detalles.join("; ")}` : "Guardó los archivos sin cambios";
+    const nuevaActividad = addActividad(order, currentUser?.name || "Usuario", accionTexto);
     const updated = { ...order, files: editFiles, filesNota: editFilesNota, actividad: nuevaActividad };
     await supabase.from("pedidos").update({ files: editFiles, files_nota: editFilesNota, actividad: nuevaActividad }).eq("id", order.id);
     setOrder(updated);
