@@ -658,6 +658,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
   const canEditThis = isAdmin || ownsOrder;
   const puedeAprobarExcl = puedeAprobarExclusiva(currentUser?.name);
   const [aprobandoExcl, setAprobandoExcl] = useState(false);
+  const [rechazandoExcl, setRechazandoExcl] = useState(false);
   const [fechaComprometida, setFechaComprometida] = useState("");
   const [savingExcl, setSavingExcl] = useState(false);
 
@@ -944,10 +945,19 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
               <div style={{ background: "#FEFCE8", border: "1px solid #FDE68A", borderRadius: 10, padding: "14px 16px" }}>
                 <div style={{ fontSize: 11, fontWeight: 800, color: "#A16207", letterSpacing: "0.06em", marginBottom: 6 }}>⭐ SOLICITUD EXCLUSIVA PENDIENTE</div>
                 <div style={{ fontSize: 12, color: "#854D0E" }}>Solicitada por {order.exclusivaSolicita}. Falta que un aprobador ponga la fecha comprometida.</div>
-                {puedeAprobarExcl && !aprobandoExcl && (
+                {puedeAprobarExcl && !aprobandoExcl && !rechazandoExcl && (
                   <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                     <button onClick={() => { setAprobandoExcl(true); setFechaComprometida(chileDateStr()); }} style={{ ...S.btnPrimary, background: "#7C3AED", padding: "8px 16px", fontSize: 13 }}>✓ Aprobar y poner fecha</button>
-                    <button onClick={() => { if (confirm("¿Rechazar la solicitud de entrega exclusiva?")) rechazarExclusiva(); }} disabled={savingExcl} style={{ background: "#fff", color: "#DC2626", border: "1px solid #FCA5A5", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✗ Rechazar</button>
+                    <button onClick={() => setRechazandoExcl(true)} disabled={savingExcl} style={{ background: "#fff", color: "#DC2626", border: "1px solid #FCA5A5", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✗ Rechazar</button>
+                  </div>
+                )}
+                {puedeAprobarExcl && rechazandoExcl && (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 12, color: "#991B1B", fontWeight: 600, marginBottom: 8 }}>¿Rechazar esta solicitud de entrega exclusiva?</div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={async () => { await rechazarExclusiva(); setRechazandoExcl(false); }} disabled={savingExcl} style={{ background: "#DC2626", color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{savingExcl ? "..." : "Sí, rechazar"}</button>
+                      <button onClick={() => setRechazandoExcl(false)} style={{ ...S.btnGhost, padding: "8px 14px" }}>No</button>
+                    </div>
                   </div>
                 )}
                 {puedeAprobarExcl && aprobandoExcl && (
@@ -1386,6 +1396,7 @@ export default function App() {
   const [notifs, setNotifs]           = useState([]);
   const [notifsOpen, setNotifsOpen]   = useState(false);
   const [exclForm, setExclForm]       = useState({ notifId: null, fecha: "" });
+  const [rejectingExcl, setRejectingExcl] = useState(null);
   const [search, setSearch]           = useState("");
   const [chatOpen, setChatOpen]       = useState(false);
   const [messages, setMessages]       = useState([]);
@@ -1894,11 +1905,21 @@ export default function App() {
                                 <button onClick={() => setExclForm({ notifId: null, fecha: "" })} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 7, padding: "8px 12px", fontSize: 12, cursor: "pointer", color: "#6B7280" }}>Cancelar</button>
                               </div>
                             </div>
+                          ) : rejectingExcl === n.id ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                              <div style={{ fontSize: 12, color: "#991B1B", fontWeight: 600 }}>¿Rechazar esta solicitud de entrega exclusiva?</div>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <button onClick={async () => { await rechazarExclusivaApp(n.pedido_id); setRejectingExcl(null); }}
+                                  style={{ flex: 1, background: "#DC2626", color: "#fff", border: "none", borderRadius: 7, padding: "8px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>Sí, rechazar</button>
+                                <button onClick={() => setRejectingExcl(null)}
+                                  style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 7, padding: "8px 12px", fontSize: 12, cursor: "pointer", color: "#6B7280" }}>No</button>
+                              </div>
+                            </div>
                           ) : (
                             <div style={{ display: "flex", gap: 6 }}>
                               <button onClick={() => setExclForm({ notifId: n.id, fecha: chileDateStr() })}
                                 style={{ flex: 1, background: "#7C3AED", color: "#fff", border: "none", borderRadius: 7, padding: "8px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>✓ Aprobar</button>
-                              <button onClick={async () => { if (confirm("¿Rechazar la solicitud de entrega exclusiva?")) { await rechazarExclusivaApp(n.pedido_id); } }}
+                              <button onClick={() => setRejectingExcl(n.id)}
                                 style={{ flex: 1, background: "#fff", color: "#DC2626", border: "1px solid #FCA5A5", borderRadius: 7, padding: "8px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>✗ Rechazar</button>
                             </div>
                           )}
