@@ -485,6 +485,7 @@ function Section({ title, count, accent, children, defaultOpen = true }) {
 function ImpresoBadge({ order }) {
   const { userName, onToggleImpreso } = useContext(AppContext);
   const esCristian = (userName || "").trim().toLowerCase() === "cristian";
+  if (!esCristian) return null; // solo visible en el perfil de Cristian
   const impreso = !!order.impreso;
   const label = impreso ? "✅ Impreso" : "❌ Sin imprimir";
   const style = {
@@ -492,12 +493,9 @@ function ImpresoBadge({ order }) {
     background: impreso ? "#DCFCE7" : "#FEE2E2",
     color: impreso ? "#15803D" : "#DC2626",
     border: `1px solid ${impreso ? "#86EFAC" : "#FCA5A5"}`,
-    cursor: esCristian ? "pointer" : "default",
+    cursor: "pointer",
   };
-  if (esCristian) {
-    return <button style={style} onClick={() => onToggleImpreso(order.id, !impreso)} title="Marcar impreso / sin imprimir">{label}</button>;
-  }
-  return <span style={style}>{label}</span>;
+  return <button style={style} onClick={() => onToggleImpreso(order.id, !impreso)} title="Marcar impreso / sin imprimir">{label}</button>;
 }
 
 function ActivityButton({ order, compact }) {
@@ -571,11 +569,11 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDet
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0, marginLeft: 12 }}>
         {dl && <DeadlineBadge dl={dl} />}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <ImpresoBadge order={order} />
           {onDetail && (
             <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={onDetail}>🔍 Detalle</button>
           )}
           <ActivityButton order={order} />
-          <ImpresoBadge order={order} />
           {isAdmin && onRevision && (
             <button style={{ ...S.actionBtn, background: "#F59E0B", color: "#fff" }} onClick={onRevision}>⚠ Revisión</button>
           )}
@@ -2758,9 +2756,9 @@ function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetai
               )}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0, marginLeft: 12 }}>
+              <ImpresoBadge order={o} />
               <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
               <ActivityButton order={o} />
-              <ImpresoBadge order={o} />
               {canEditOrders && <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onEdit(o)}>✏ Editar</button>}
               <button style={{ ...S.actionBtn, background: "#3B82F6", color: "#fff" }} onClick={() => onRestore(o.id)}>↩ Restaurar</button>
               <button style={{ ...S.actionBtn, background: "#059669", color: "#fff" }} onClick={() => onMarkListo(o.id)}>✓ Marcar listo</button>
