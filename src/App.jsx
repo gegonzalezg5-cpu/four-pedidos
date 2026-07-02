@@ -213,7 +213,7 @@ function dLeft(dl) {
   const d = new Date(dl); d.setHours(0, 0, 0, 0);
   return Math.round((d - t) / 86400000);
 }
-const APROBADORES_EXCLUSIVA = ["genaro", "diego", "miguel", "jorge"];
+const APROBADORES_EXCLUSIVA = ["genaro", "administrador", "diego", "miguel", "jorge"];
 function puedeAprobarExclusiva(name) {
   const n = (name || "").trim().toLowerCase().split(/\s+/)[0];
   return APROBADORES_EXCLUSIVA.includes(n);
@@ -667,7 +667,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
     const updated = { ...order, exclusivaEstado: "pendiente", exclusivaSolicita: currentUser?.name || null, actividad: nuevaActividad };
     await supabase.from("pedidos").update({ exclusiva_estado: "pendiente", exclusiva_solicita: currentUser?.name || null, actividad: nuevaActividad }).eq("id", order.id);
     // Notificar a los aprobadores
-    for (const ap of ["Genaro", "Diego", "Miguel", "Jorge"]) {
+    for (const ap of ["Administrador", "Diego", "Miguel", "Jorge"]) {
       createNotification({ para: ap, tipo: "exclusiva", titulo: `Solicitud exclusiva: ${order.cliente}`, mensaje: `${currentUser?.name} pide entrega exclusiva. Requiere tu aprobación y fecha comprometida.`, pedidoId: order.id });
     }
     setOrder(updated);
@@ -1368,6 +1368,7 @@ export default function App() {
   const [listoOpen, setListoOpen]     = useState(false);
   const [notifs, setNotifs]           = useState([]);
   const [notifsOpen, setNotifsOpen]   = useState(false);
+  const [exclForm, setExclForm]       = useState({ notifId: null, fecha: "" });
   const [search, setSearch]           = useState("");
   const [chatOpen, setChatOpen]       = useState(false);
   const [messages, setMessages]       = useState([]);
@@ -1648,6 +1649,25 @@ export default function App() {
     await supabase.from("pedidos").update({ impreso: value }).eq("id", orderId);
   };
 
+  const aprobarExclusivaApp = async (orderId, fechaStr) => {
+    if (!fechaStr) return;
+    const lists = ["four", "sub", "revision", "listo", "delivered"];
+    let order = null;
+    for (const k of lists) { const f = (data[k] || []).find(o => o.id === orderId); if (f) { order = f; break; } }
+    if (!order) return;
+    const fechaISO = new Date(`${fechaStr}T18:00:00`).toISOString();
+    const patch = {};
+    if (order.type === "four") patch.deadline = fechaISO;
+    else if (order.stage === "produccion") patch.deadlineProduccion = fechaISO;
+    else patch.deadlineDiseno = fechaISO;
+    const nuevaActividad = addActividad(order, user.name, `Aprobó entrega exclusiva — comprometida para ${fmtDate(fechaISO)}`);
+    const updated = { ...order, ...patch, exclusivaEstado: "aprobada", exclusivaFecha: fechaISO, exclusivaPor: user.name, actividad: nuevaActividad };
+    const newData = { ...data };
+    for (const k of lists) newData[k] = (data[k] || []).map(o => o.id === orderId ? updated : o);
+    persist(newData, [updated]);
+    if (order.exclusivaSolicita) createNotification({ para: order.exclusivaSolicita, tipo: "exclusiva", titulo: `Exclusiva aprobada: ${order.cliente}`, mensaje: `${user.name} aprobó tu entrega exclusiva, comprometida para ${fmtDate(fechaISO)}.`, pedidoId: order.id });
+  };
+
   const reorderList = async (listKey, newList) => {
     // Assign sort_order based on new position
     const updated = newList.map((o, i) => ({ ...o, sortOrder: i }));
@@ -1815,16 +1835,44 @@ export default function App() {
                   <div style={{ padding: "14px 16px", borderBottom: "1px solid #F3F4F6", fontWeight: 800, fontSize: 13, color: "#111827", fontFamily: "NikeFutura, Montserrat, sans-serif", letterSpacing: "0.06em" }}>NOTIFICACIONES</div>
                   {notifs.length === 0 ? (
                     <div style={{ padding: "32px 16px", textAlign: "center", color: "#D1D5DB", fontSize: 13 }}>Sin notificaciones</div>
-                  ) : notifs.map(n => (
+                  ) : notifs.map(n => {
+                    // ¿Es una solicitud de exclusiva pendiente que YO puedo aprobar?
+                    const pedidoExcl = n.tipo === "exclusiva" && n.pedido_id
+                      ? [...data.four, ...data.sub, ...(data.revision||[]), ...(data.listo||[])].find(o => o.id === n.pedido_id)
+                      : null;
+                    const puedoAprobarAqui = pedidoExcl && pedidoExcl.exclusivaEstado === "pendiente" && puedeAprobarExclusiva(user.name);
+                    return (
                     <div key={n.id} style={{ padding: "12px 16px", borderBottom: "1px solid #F3F4F6", background: n.leida ? "#fff" : "#FFFBEB" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
                         {n.tipo === "revision" && <span style={{ fontSize: 14 }}>⚠️</span>}
+                        {n.tipo === "exclusiva" && <span style={{ fontSize: 14 }}>⭐</span>}
+                        {n.tipo === "listo" && <span style={{ fontSize: 14 }}>✅</span>}
                         <span style={{ fontSize: 13, fontWeight: 800, color: "#111827" }}>{n.titulo}</span>
                       </div>
                       {n.mensaje && <div style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.5, marginBottom: 4 }}>{n.mensaje}</div>}
                       <div style={{ fontSize: 10, color: "#9CA3AF" }}>{new Date(n.created_at).toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: CHILE_TZ })}</div>
+                      {puedoAprobarAqui && (
+                        <div style={{ marginTop: 10, background: "#F5F3FF", border: "1px solid #DDD6FE", borderRadius: 8, padding: "10px" }}>
+                          {exclForm.notifId === n.id ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                              <label style={{ fontSize: 11, fontWeight: 700, color: "#6D28D9" }}>Fecha comprometida de entrega</label>
+                              <input type="date" value={exclForm.fecha} min={chileDateStr()} onChange={e => setExclForm({ notifId: n.id, fecha: e.target.value })}
+                                style={{ padding: "8px 10px", borderRadius: 7, border: "1px solid #C4B5FD", fontSize: 13, outline: "none" }} />
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <button disabled={!exclForm.fecha} onClick={async () => { await aprobarExclusivaApp(n.pedido_id, exclForm.fecha); setExclForm({ notifId: null, fecha: "" }); }}
+                                  style={{ flex: 1, background: exclForm.fecha ? "#7C3AED" : "#E5E7EB", color: exclForm.fecha ? "#fff" : "#9CA3AF", border: "none", borderRadius: 7, padding: "8px", fontWeight: 700, fontSize: 12, cursor: exclForm.fecha ? "pointer" : "default" }}>✓ Aprobar</button>
+                                <button onClick={() => setExclForm({ notifId: null, fecha: "" })} style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 7, padding: "8px 12px", fontSize: 12, cursor: "pointer", color: "#6B7280" }}>Cancelar</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button onClick={() => setExclForm({ notifId: n.id, fecha: chileDateStr() })}
+                              style={{ width: "100%", background: "#7C3AED", color: "#fff", border: "none", borderRadius: 7, padding: "8px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>⭐ Aprobar y poner fecha</button>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
