@@ -213,6 +213,24 @@ function dLeft(dl) {
   const d = new Date(dl); d.setHours(0, 0, 0, 0);
   return Math.round((d - t) / 86400000);
 }
+const APROBADORES_EXCLUSIVA = ["genaro", "diego", "miguel", "jorge"];
+function puedeAprobarExclusiva(name) {
+  const n = (name || "").trim().toLowerCase().split(/\s+/)[0];
+  return APROBADORES_EXCLUSIVA.includes(n);
+}
+// Exclusiva "activa hoy": aprobada y ya llegó (o pasó) el día comprometido
+function esExclusivaHoy(o) {
+  if (o.exclusivaEstado !== "aprobada" || !o.exclusivaFecha) return false;
+  return chileDateStr() >= chileDateStr(o.exclusivaFecha);
+}
+// Comparador central: exclusivas del día primero, luego orden normal
+function compareOrders(a, b) {
+  const ea = esExclusivaHoy(a) ? 0 : 1;
+  const eb = esExclusivaHoy(b) ? 0 : 1;
+  if (ea !== eb) return ea - eb;
+  if (ea === 0) { const d = new Date(a.exclusivaFecha) - new Date(b.exclusivaFecha); if (d !== 0) return d; }
+  return (a.sortOrder || 0) - (b.sortOrder || 0) || new Date(a.createdAt) - new Date(b.createdAt);
+}
 function inPeriod(dateStr, period, from, to) {
   if (period === "todo") return true;
   const d = new Date(dateStr), now = new Date();
@@ -263,6 +281,10 @@ function rowToOrder(row) {
     sortOrder:         row.sort_order || 0,
     actividad:         row.actividad || [],
     impreso:           row.impreso || false,
+    exclusivaEstado:   row.exclusiva_estado || null,
+    exclusivaFecha:    row.exclusiva_fecha || null,
+    exclusivaSolicita: row.exclusiva_solicita || null,
+    exclusivaPor:      row.exclusiva_por || null,
     cantidadEstampados: row.cantidad_estampados,
     estampador:        row.estampador,
     filesMaqueta:      row.files_maqueta || [],
@@ -303,6 +325,10 @@ function orderToRow(o) {
     sort_order:          o.sortOrder || 0,
     actividad:           o.actividad || [],
     impreso:             o.impreso || false,
+    exclusiva_estado:    o.exclusivaEstado || null,
+    exclusiva_fecha:     o.exclusivaFecha || null,
+    exclusiva_solicita:  o.exclusivaSolicita || null,
+    exclusiva_por:       o.exclusivaPor || null,
     cantidad_estampados: o.cantidadEstampados || null,
     estampador:          o.estampador || null,
     files_maqueta:       o.filesMaqueta || [],
@@ -323,7 +349,7 @@ async function loadDataFromSupabase() {
       else if (o.type === "sub") result.sub.push(o);
     }
     // Sort by sortOrder (manual), then by createdAt (newest first)
-    const sortList = arr => [...arr].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || new Date(a.createdAt) - new Date(b.createdAt));
+    const sortList = arr => [...arr].sort(compareOrders);
     result.four = sortList(result.four);
     result.sub = sortList(result.sub);
     return result;
@@ -559,10 +585,13 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDet
   const days = dl ? dLeft(dl) : null;
   const urgent = days !== null && days <= 2;
   const totalFiles = (order.files?.length || 0) + (order.filesNota?.length || 0);
+  const exclusivaAprobada = order.exclusivaEstado === "aprobada";
+  const exclusivaHoy = esExclusivaHoy(order);
+  const cardAccent = exclusivaAprobada ? "#8B5CF6" : (urgent ? "#EF4444" : accentColor);
   return (
-    <div style={{ ...S.orderCard, borderLeft: `3px solid ${urgent ? "#EF4444" : accentColor}` }}>
+    <div style={{ ...S.orderCard, borderLeft: `${exclusivaAprobada ? 5 : 3}px solid ${cardAccent}`, background: exclusivaHoy ? "#F5F3FF" : (exclusivaAprobada ? "#FAF9FF" : "#fff") }}>
       {position != null && (
-        <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: "50%", background: urgent ? "#EF4444" : accentColor, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 900, marginRight: 14, fontFamily: "NikeFutura, Montserrat, sans-serif" }}>
+        <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: "50%", background: cardAccent, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 900, marginRight: 14, fontFamily: "NikeFutura, Montserrat, sans-serif" }}>
           {position}
         </div>
       )}
@@ -571,6 +600,8 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDet
           <span style={{ fontWeight: 900, fontSize: 18, color: "#111827", textTransform: "uppercase", letterSpacing: "0.02em" }}>{order.cliente}</span>
           {isFour && order.express && <span style={S.chipExpress}>⚡ EXPRESS</span>}
           {!isFour && <span style={{ ...S.chip, background: order.stage === "diseno" ? "#FEE2E2" : "#FEF3C7", color: order.stage === "diseno" ? "#DC2626" : "#D97706" }}>{order.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN"}</span>}
+          {exclusivaAprobada && <span style={{ ...S.chip, background: "#EDE9FE", color: "#6D28D9", fontWeight: 800 }}>⭐ EXCLUSIVO {order.exclusivaFecha ? fmtDate(order.exclusivaFecha) : ""}</span>}
+          {order.exclusivaEstado === "pendiente" && <span style={{ ...S.chip, background: "#FEF9C3", color: "#A16207" }}>⭐ EXCLUSIVA PENDIENTE</span>}
           {order.listoAt && !order.deliveredAt && <span style={{ ...S.chip, background: "#DCFCE7", color: "#15803D" }}>✓ LISTO</span>}
           {totalFiles > 0 && <span style={{ ...S.chip, background: "#EFF6FF", color: "#3B82F6" }}>📎 {totalFiles}</span>}
         </div>
@@ -625,6 +656,47 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
   const firstName = s => (s || "").trim().toLowerCase().split(/\s+/)[0];
   const ownsOrder = !!(order.vendedor && currentUser?.name && firstName(order.vendedor) === firstName(currentUser.name));
   const canEditThis = isAdmin || ownsOrder;
+  const puedeAprobarExcl = puedeAprobarExclusiva(currentUser?.name);
+  const [aprobandoExcl, setAprobandoExcl] = useState(false);
+  const [fechaComprometida, setFechaComprometida] = useState("");
+  const [savingExcl, setSavingExcl] = useState(false);
+
+  const solicitarExclusiva = async () => {
+    setSavingExcl(true);
+    const nuevaActividad = addActividad(order, currentUser?.name || "Usuario", "Solicitó entrega exclusiva");
+    const updated = { ...order, exclusivaEstado: "pendiente", exclusivaSolicita: currentUser?.name || null, actividad: nuevaActividad };
+    await supabase.from("pedidos").update({ exclusiva_estado: "pendiente", exclusiva_solicita: currentUser?.name || null, actividad: nuevaActividad }).eq("id", order.id);
+    // Notificar a los aprobadores
+    for (const ap of ["Genaro", "Diego", "Miguel", "Jorge"]) {
+      createNotification({ para: ap, tipo: "exclusiva", titulo: `Solicitud exclusiva: ${order.cliente}`, mensaje: `${currentUser?.name} pide entrega exclusiva. Requiere tu aprobación y fecha comprometida.`, pedidoId: order.id });
+    }
+    setOrder(updated);
+    if (onSaveFiles) onSaveFiles(updated);
+    setSavingExcl(false);
+  };
+
+  const aprobarExclusiva = async () => {
+    if (!fechaComprometida) return;
+    setSavingExcl(true);
+    const fechaISO = new Date(`${fechaComprometida}T18:00:00`).toISOString();
+    const nuevaActividad = addActividad(order, currentUser?.name || "Usuario", `Aprobó entrega exclusiva — comprometida para ${fmtDate(fechaISO)}`);
+    // La fecha comprometida reemplaza la fecha máxima de entrega
+    const deadlinePatch = {};
+    if (order.type === "four") deadlinePatch.deadline = fechaISO;
+    else if (order.stage === "produccion") deadlinePatch.deadlineProduccion = fechaISO;
+    else deadlinePatch.deadlineDiseno = fechaISO;
+    const updated = { ...order, ...deadlinePatch, exclusivaEstado: "aprobada", exclusivaFecha: fechaISO, exclusivaPor: currentUser?.name || null, actividad: nuevaActividad };
+    await supabase.from("pedidos").update({
+      exclusiva_estado: "aprobada", exclusiva_fecha: fechaISO, exclusiva_por: currentUser?.name || null,
+      deadline: updated.deadline || null, deadline_diseno: updated.deadlineDiseno || null, deadline_produccion: updated.deadlineProduccion || null,
+      actividad: nuevaActividad,
+    }).eq("id", order.id);
+    if (order.exclusivaSolicita) createNotification({ para: order.exclusivaSolicita, tipo: "exclusiva", titulo: `Exclusiva aprobada: ${order.cliente}`, mensaje: `${currentUser?.name} aprobó tu entrega exclusiva, comprometida para ${fmtDate(fechaISO)}.`, pedidoId: order.id });
+    setOrder(updated);
+    if (onSaveFiles) onSaveFiles(updated);
+    setAprobandoExcl(false);
+    setSavingExcl(false);
+  };
 
   const isFour = order.type === "four";
   const dl = isFour ? order.deadline : (order.stage === "produccion" ? order.deadlineProduccion : order.deadlineDiseno);
@@ -846,6 +918,40 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
             {order.listoAt && <Row label="Marcado listo" value={fmtDate(order.listoAt)} />}
             {order.estampador && <Row label="Estampador" value={order.estampador} bold />}
             {order.deliveredAt && <Row label="Entregado" value={`${fmtDate(order.deliveredAt)} · por ${order.despachador}`} />}
+          </div>
+
+          {/* ── Entrega exclusiva ── */}
+          <div style={{ marginBottom: 20 }}>
+            {order.exclusivaEstado === "aprobada" ? (
+              <div style={{ background: "#F5F3FF", border: "1px solid #DDD6FE", borderRadius: 10, padding: "14px 16px" }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: "#6D28D9", letterSpacing: "0.06em", marginBottom: 6 }}>⭐ ENTREGA EXCLUSIVA APROBADA</div>
+                <div style={{ fontSize: 14, color: "#4C1D95", fontWeight: 700 }}>Comprometida para: {fmtDate(order.exclusivaFecha)}</div>
+                <div style={{ fontSize: 12, color: "#7C3AED", marginTop: 4 }}>Aprobada por {order.exclusivaPor}{order.exclusivaSolicita ? ` · Solicitada por ${order.exclusivaSolicita}` : ""}</div>
+                <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 6 }}>Este pedido sube al primer lugar el día comprometido.</div>
+              </div>
+            ) : order.exclusivaEstado === "pendiente" ? (
+              <div style={{ background: "#FEFCE8", border: "1px solid #FDE68A", borderRadius: 10, padding: "14px 16px" }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: "#A16207", letterSpacing: "0.06em", marginBottom: 6 }}>⭐ SOLICITUD EXCLUSIVA PENDIENTE</div>
+                <div style={{ fontSize: 12, color: "#854D0E" }}>Solicitada por {order.exclusivaSolicita}. Falta que un aprobador ponga la fecha comprometida.</div>
+                {puedeAprobarExcl && !aprobandoExcl && (
+                  <button onClick={() => { setAprobandoExcl(true); setFechaComprometida(chileDateStr()); }} style={{ ...S.btnPrimary, background: "#7C3AED", marginTop: 10, padding: "8px 16px", fontSize: 13 }}>✓ Aprobar y poner fecha</button>
+                )}
+                {puedeAprobarExcl && aprobandoExcl && (
+                  <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+                    <div>
+                      <label style={S.label}>Fecha comprometida</label>
+                      <input type="date" value={fechaComprometida} min={chileDateStr()} onChange={e => setFechaComprometida(e.target.value)} style={{ ...S.input, marginTop: 5 }} />
+                    </div>
+                    <button onClick={aprobarExclusiva} disabled={savingExcl || !fechaComprometida} style={{ ...S.btnPrimary, background: "#7C3AED", padding: "10px 16px" }}>{savingExcl ? "..." : "Confirmar"}</button>
+                    <button onClick={() => setAprobandoExcl(false)} style={{ ...S.btnGhost, padding: "10px 14px" }}>Cancelar</button>
+                  </div>
+                )}
+              </div>
+            ) : (ownsOrder && !order.listoAt && !order.deliveredAt) ? (
+              <button onClick={solicitarExclusiva} disabled={savingExcl} style={{ width: "100%", background: "#F5F3FF", border: "1px dashed #C4B5FD", borderRadius: 10, padding: "12px", color: "#7C3AED", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                {savingExcl ? "Enviando..." : "⭐ Solicitar entrega exclusiva (prioridad)"}
+              </button>
+            ) : null}
           </div>
 
           {/* Notas del vendedor */}
@@ -2612,7 +2718,7 @@ function AtrasadosView({ orders, isAdmin, onDeliver, onApprove, onRevision, onDe
 // ─── TODOS VIEW ───────────────────────────────────────────────────────────────
 function TodosView({ orders, isAdmin, onDeliver, onApprove, onRevision, onDetail }) {
   const [fv, setFv] = useState("Todos");
-  const sortByOrder = (a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || new Date(a.createdAt) - new Date(b.createdAt);
+  const sortByOrder = compareOrders;
   const fourOrders = orders.filter(o => o.type === "four" && (fv === "Todos" || o.vendedor === fv)).sort(sortByOrder);
   const subOrders  = orders.filter(o => o.type === "sub"  && (fv === "Todos" || o.vendedor === fv)).sort(sortByOrder);
   // Pedidos atrasados (vencidos): el más atrasado arriba
@@ -2673,7 +2779,7 @@ function FourView({ orders, isAdmin, onDeliver, onRevision, onDetail, onDelete, 
   const [fv, setFv] = useState("Todos");
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
-  const filtered = fv === "Todos" ? [...orders] : orders.filter(o => o.vendedor === fv);
+  const filtered = (fv === "Todos" ? [...orders] : orders.filter(o => o.vendedor === fv)).sort(compareOrders);
 
   const handleDragStart = (i) => setDragIdx(i);
   const handleDragOver = (e, i) => { e.preventDefault(); setDragOverIdx(i); };
@@ -2729,9 +2835,11 @@ function SubView({ orders, isAdmin, onApprove, onDeliver, onRevision, onDetail, 
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const [dragSection, setDragSection] = useState(null);
   const filtered = fv === "Todos" ? [...orders] : orders.filter(o => o.vendedor === fv);
-  const enD = filtered.filter(o => o.stage === "diseno");
+  const enD = filtered.filter(o => o.stage === "diseno").sort(compareOrders);
   // En Producción se ordena por fecha de aprobación del diseño: el que aprobó primero va primero
   const enP = filtered.filter(o => o.stage === "produccion").sort((a, b) => {
+    const ea = esExclusivaHoy(a) ? 0 : 1, eb = esExclusivaHoy(b) ? 0 : 1;
+    if (ea !== eb) return ea - eb;
     if (!a.approvedAt) return 1; if (!b.approvedAt) return -1;
     return new Date(a.approvedAt) - new Date(b.approvedAt);
   });
