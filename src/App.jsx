@@ -698,6 +698,17 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
     setSavingExcl(false);
   };
 
+  const rechazarExclusiva = async () => {
+    setSavingExcl(true);
+    const nuevaActividad = addActividad(order, currentUser?.name || "Usuario", "Rechazó la solicitud de entrega exclusiva");
+    const updated = { ...order, exclusivaEstado: "rechazada", actividad: nuevaActividad };
+    await supabase.from("pedidos").update({ exclusiva_estado: "rechazada", actividad: nuevaActividad }).eq("id", order.id);
+    if (order.exclusivaSolicita) createNotification({ para: order.exclusivaSolicita, tipo: "exclusiva", titulo: `Exclusiva rechazada: ${order.cliente}`, mensaje: `${currentUser?.name} rechazó tu solicitud de entrega exclusiva.`, pedidoId: order.id });
+    setOrder(updated);
+    if (onSaveFiles) onSaveFiles(updated);
+    setSavingExcl(false);
+  };
+
   const isFour = order.type === "four";
   const dl = isFour ? order.deadline : (order.stage === "produccion" ? order.deadlineProduccion : order.deadlineDiseno);
 
@@ -934,7 +945,10 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
                 <div style={{ fontSize: 11, fontWeight: 800, color: "#A16207", letterSpacing: "0.06em", marginBottom: 6 }}>⭐ SOLICITUD EXCLUSIVA PENDIENTE</div>
                 <div style={{ fontSize: 12, color: "#854D0E" }}>Solicitada por {order.exclusivaSolicita}. Falta que un aprobador ponga la fecha comprometida.</div>
                 {puedeAprobarExcl && !aprobandoExcl && (
-                  <button onClick={() => { setAprobandoExcl(true); setFechaComprometida(chileDateStr()); }} style={{ ...S.btnPrimary, background: "#7C3AED", marginTop: 10, padding: "8px 16px", fontSize: 13 }}>✓ Aprobar y poner fecha</button>
+                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                    <button onClick={() => { setAprobandoExcl(true); setFechaComprometida(chileDateStr()); }} style={{ ...S.btnPrimary, background: "#7C3AED", padding: "8px 16px", fontSize: 13 }}>✓ Aprobar y poner fecha</button>
+                    <button onClick={() => { if (confirm("¿Rechazar la solicitud de entrega exclusiva?")) rechazarExclusiva(); }} disabled={savingExcl} style={{ background: "#fff", color: "#DC2626", border: "1px solid #FCA5A5", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✗ Rechazar</button>
+                  </div>
                 )}
                 {puedeAprobarExcl && aprobandoExcl && (
                   <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
@@ -948,9 +962,12 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
                 )}
               </div>
             ) : (ownsOrder && !order.listoAt && !order.deliveredAt) ? (
-              <button onClick={solicitarExclusiva} disabled={savingExcl} style={{ width: "100%", background: "#F5F3FF", border: "1px dashed #C4B5FD", borderRadius: 10, padding: "12px", color: "#7C3AED", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                {savingExcl ? "Enviando..." : "⭐ Solicitar entrega exclusiva (prioridad)"}
-              </button>
+              <>
+                {order.exclusivaEstado === "rechazada" && <div style={{ fontSize: 12, color: "#DC2626", marginBottom: 8, fontWeight: 600 }}>⭐ Tu solicitud anterior fue rechazada. Puedes volver a solicitarla.</div>}
+                <button onClick={solicitarExclusiva} disabled={savingExcl} style={{ width: "100%", background: "#F5F3FF", border: "1px dashed #C4B5FD", borderRadius: 10, padding: "12px", color: "#7C3AED", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                  {savingExcl ? "Enviando..." : "⭐ Solicitar entrega exclusiva (prioridad)"}
+                </button>
+              </>
             ) : null}
           </div>
 
@@ -1668,6 +1685,19 @@ export default function App() {
     if (order.exclusivaSolicita) createNotification({ para: order.exclusivaSolicita, tipo: "exclusiva", titulo: `Exclusiva aprobada: ${order.cliente}`, mensaje: `${user.name} aprobó tu entrega exclusiva, comprometida para ${fmtDate(fechaISO)}.`, pedidoId: order.id });
   };
 
+  const rechazarExclusivaApp = async (orderId) => {
+    const lists = ["four", "sub", "revision", "listo", "delivered"];
+    let order = null;
+    for (const k of lists) { const f = (data[k] || []).find(o => o.id === orderId); if (f) { order = f; break; } }
+    if (!order) return;
+    const nuevaActividad = addActividad(order, user.name, "Rechazó la solicitud de entrega exclusiva");
+    const updated = { ...order, exclusivaEstado: "rechazada", actividad: nuevaActividad };
+    const newData = { ...data };
+    for (const k of lists) newData[k] = (data[k] || []).map(o => o.id === orderId ? updated : o);
+    persist(newData, [updated]);
+    if (order.exclusivaSolicita) createNotification({ para: order.exclusivaSolicita, tipo: "exclusiva", titulo: `Exclusiva rechazada: ${order.cliente}`, mensaje: `${user.name} rechazó tu solicitud de entrega exclusiva.`, pedidoId: order.id });
+  };
+
   const reorderList = async (listKey, newList) => {
     // Assign sort_order based on new position
     const updated = newList.map((o, i) => ({ ...o, sortOrder: i }));
@@ -1865,8 +1895,12 @@ export default function App() {
                               </div>
                             </div>
                           ) : (
-                            <button onClick={() => setExclForm({ notifId: n.id, fecha: chileDateStr() })}
-                              style={{ width: "100%", background: "#7C3AED", color: "#fff", border: "none", borderRadius: 7, padding: "8px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>⭐ Aprobar y poner fecha</button>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <button onClick={() => setExclForm({ notifId: n.id, fecha: chileDateStr() })}
+                                style={{ flex: 1, background: "#7C3AED", color: "#fff", border: "none", borderRadius: 7, padding: "8px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>✓ Aprobar</button>
+                              <button onClick={async () => { if (confirm("¿Rechazar la solicitud de entrega exclusiva?")) { await rechazarExclusivaApp(n.pedido_id); } }}
+                                style={{ flex: 1, background: "#fff", color: "#DC2626", border: "1px solid #FCA5A5", borderRadius: 7, padding: "8px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>✗ Rechazar</button>
+                            </div>
                           )}
                         </div>
                       )}
