@@ -115,6 +115,24 @@ async function markAllNotificationsRead(name) {
 }
 
 // ─── CHAT HELPERS ─────────────────────────────────────────────────────────────
+let _audioCtx = null;
+function playBeep() {
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _audioCtx;
+    if (ctx.state === "suspended") ctx.resume();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type = "sine";
+    o.frequency.setValueAtTime(880, ctx.currentTime);
+    o.frequency.setValueAtTime(1100, ctx.currentTime + 0.1);
+    g.gain.setValueAtTime(0.15, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
+    o.start(ctx.currentTime);
+    o.stop(ctx.currentTime + 0.35);
+  } catch (e) { /* silencio si el navegador bloquea */ }
+}
 async function loadMessages() {
   try {
     const { data, error } = await supabase.from("mensajes")
@@ -710,6 +728,38 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
     setFileList(fileList.filter(x => x.id !== f.id));
   };
 
+  const imprimirNotas = () => {
+    const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const w = window.open("", "_blank", "width=800,height=900");
+    if (!w) { alert("Habilita las ventanas emergentes para imprimir."); return; }
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Notas — ${esc(order.cliente)}</title>
+      <style>
+        * { font-family: Arial, Helvetica, sans-serif; }
+        body { padding: 40px; color: #111; }
+        h1 { font-size: 22px; margin: 0 0 4px; text-transform: uppercase; }
+        .sub { color: #666; font-size: 13px; margin-bottom: 24px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; font-size: 14px; margin-bottom: 28px; border: 1px solid #ddd; border-radius: 8px; padding: 16px; }
+        .grid b { color: #444; }
+        .notas-title { font-size: 12px; font-weight: bold; letter-spacing: 1px; color: #666; margin-bottom: 8px; text-transform: uppercase; }
+        .notas { font-size: 15px; line-height: 1.7; white-space: pre-wrap; border-left: 4px solid #111; padding-left: 16px; }
+        .footer { margin-top: 40px; font-size: 11px; color: #999; border-top: 1px solid #eee; padding-top: 12px; }
+      </style></head><body>
+      <h1>${esc(order.cliente)}</h1>
+      <div class="sub">${order.type === "four" ? "Pedido Four" : "Sublimado"} · Nota de venta ${esc(order.notaVenta || "—")}</div>
+      <div class="grid">
+        <div><b>Vendedor:</b> ${esc(order.vendedor)}</div>
+        <div><b>Deporte:</b> ${esc(order.deporte)}</div>
+        <div><b>Cantidad:</b> ${esc(order.cantidad)} prendas</div>
+        <div><b>Ingresado:</b> ${esc(fmtDateTime(order.createdAt))}</div>
+      </div>
+      <div class="notas-title">📝 Notas / Comentarios</div>
+      <div class="notas">${esc(order.notas) || "<span style='color:#bbb'>Sin notas registradas</span>"}</div>
+      <div class="footer">Four Sport · Impreso ${esc(fmtDateTime(new Date().toISOString()))}</div>
+      </body></html>`);
+    w.document.close();
+    setTimeout(() => { w.focus(); w.print(); }, 300);
+  };
+
   const FileList = ({ files, label, color = "#3B82F6", bg = "#EFF6FF", editable, fileList, setFileList }) => {
     if (!files || files.length === 0) {
       if (editable) return (
@@ -801,7 +851,10 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
           {/* Notas del vendedor */}
           {order.notas && (
             <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
-              <div style={{ fontSize: 10, fontWeight: 800, color: "#6B7280", letterSpacing: "0.08em", marginBottom: 6 }}>📝 NOTAS / COMENTARIOS</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: "#6B7280", letterSpacing: "0.08em" }}>📝 NOTAS / COMENTARIOS</div>
+                <button onClick={imprimirNotas} style={{ fontSize: 12, fontWeight: 700, color: "#111827", background: "#fff", border: "1px solid #D1D5DB", borderRadius: 6, padding: "5px 12px", cursor: "pointer" }}>🖨 Imprimir</button>
+              </div>
               <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{order.notas}</div>
             </div>
           )}
@@ -1270,7 +1323,11 @@ export default function App() {
     loadNotifications(user.name).then(setNotifs);
     const ch = supabase
       .channel("notif-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "notificaciones" }, () => {
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notificaciones" }, payload => {
+        if (payload.new && payload.new.para === user.name) playBeep();
+        loadNotifications(user.name).then(setNotifs);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "notificaciones" }, () => {
         loadNotifications(user.name).then(setNotifs);
       })
       .subscribe();
@@ -1284,6 +1341,7 @@ export default function App() {
     const ch = supabase
       .channel("chat-changes")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "mensajes" }, payload => {
+        if (payload.new && payload.new.autor !== user.name) playBeep();
         setMessages(prev => [...prev, payload.new]);
       })
       .subscribe();
@@ -1297,7 +1355,11 @@ export default function App() {
     loadUsersFromSupabase().then(setAllUsers);
     const ch = supabase
       .channel("priv-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "mensajes_privados" }, () => {
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "mensajes_privados" }, payload => {
+        if (payload.new && payload.new.para === user.name && payload.new.de !== user.name) playBeep();
+        loadPrivateMessages(user.name).then(setPrivMessages);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "mensajes_privados" }, () => {
         loadPrivateMessages(user.name).then(setPrivMessages);
       })
       .subscribe();
@@ -1393,6 +1455,14 @@ export default function App() {
       listo: [updated, ...(data.listo || [])],
     };
     persist(newData, [updated]);
+    // Notificar al vendedor que su pedido está listo
+    createNotification({
+      para: order.vendedor,
+      tipo: "listo",
+      titulo: `Pedido listo: ${order.cliente}`,
+      mensaje: "Tu pedido fue marcado como listo para entrega.",
+      pedidoId: order.id,
+    });
     setConfirm(null);
   };
   const despachar = (id) => {
