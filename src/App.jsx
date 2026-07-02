@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, createContext, useContext } from "react";
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
 // ─── SUPABASE CLIENT ──────────────────────────────────────────────────────────
@@ -31,6 +31,7 @@ const LOGO_IMG = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1B
 const SELLERS = ["Angelica Gonzalez","Diego Gonzalez","Enrique Diaz","Genaro Gonzalez","Lucía Rampinelli","Miguel Gonzalez","Patricio Mansilla","Paulo Riquelme","Ricardo Parrague"];
 const SPORTS  = ["Fútbol","Basketball","Volleyball","Atletismo","Natación","Tenis","Rugby","Otro"];
 const ESTAMPADORES = ["Rodrigo","Amanda","David"];
+const AppContext = createContext({ userName: "", onToggleImpreso: null });
 // Legacy fallback key (used if Supabase is unavailable)
 const STORAGE_KEY = "foursport_v6";
 const USERS_KEY   = "foursport_users_v1";
@@ -243,6 +244,7 @@ function rowToOrder(row) {
     editedAt:          row.edited_at,
     sortOrder:         row.sort_order || 0,
     actividad:         row.actividad || [],
+    impreso:           row.impreso || false,
     cantidadEstampados: row.cantidad_estampados,
     estampador:        row.estampador,
     filesMaqueta:      row.files_maqueta || [],
@@ -282,6 +284,7 @@ function orderToRow(o) {
     edited_at:           o.editedAt || null,
     sort_order:          o.sortOrder || 0,
     actividad:           o.actividad || [],
+    impreso:             o.impreso || false,
     cantidad_estampados: o.cantidadEstampados || null,
     estampador:          o.estampador || null,
     files_maqueta:       o.filesMaqueta || [],
@@ -479,6 +482,24 @@ function Section({ title, count, accent, children, defaultOpen = true }) {
 }
 
 // ─── ORDER CARD ───────────────────────────────────────────────────────────────
+function ImpresoBadge({ order }) {
+  const { userName, onToggleImpreso } = useContext(AppContext);
+  const esCristian = (userName || "").trim().toLowerCase() === "cristian";
+  const impreso = !!order.impreso;
+  const label = impreso ? "✅ Impreso" : "❌ Sin imprimir";
+  const style = {
+    ...S.actionBtn,
+    background: impreso ? "#DCFCE7" : "#FEE2E2",
+    color: impreso ? "#15803D" : "#DC2626",
+    border: `1px solid ${impreso ? "#86EFAC" : "#FCA5A5"}`,
+    cursor: esCristian ? "pointer" : "default",
+  };
+  if (esCristian) {
+    return <button style={style} onClick={() => onToggleImpreso(order.id, !impreso)} title="Marcar impreso / sin imprimir">{label}</button>;
+  }
+  return <span style={style}>{label}</span>;
+}
+
 function ActivityButton({ order, compact }) {
   const [open, setOpen] = useState(false);
   const acts = order.actividad || [];
@@ -554,6 +575,7 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDet
             <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={onDetail}>🔍 Detalle</button>
           )}
           <ActivityButton order={order} />
+          <ImpresoBadge order={order} />
           {isAdmin && onRevision && (
             <button style={{ ...S.actionBtn, background: "#F59E0B", color: "#fff" }} onClick={onRevision}>⚠ Revisión</button>
           )}
@@ -1438,6 +1460,20 @@ export default function App() {
   };
   const deleteDel = id => persist({ ...data, delivered: data.delivered.filter(d => d.id !== id) }, []);
 
+  const toggleImpreso = async (orderId, value) => {
+    // Buscar el pedido en cualquier lista y actualizar
+    const lists = ["four", "sub", "revision", "listo", "delivered"];
+    let target = null;
+    for (const k of lists) { const f = (data[k] || []).find(o => o.id === orderId); if (f) { target = f; break; } }
+    if (!target) return;
+    const updated = { ...target, impreso: value };
+    const newData = { ...data };
+    for (const k of lists) newData[k] = (data[k] || []).map(o => o.id === orderId ? updated : o);
+    setData(newData);
+    saveData(newData);
+    await supabase.from("pedidos").update({ impreso: value }).eq("id", orderId);
+  };
+
   const reorderList = async (listKey, newList) => {
     // Assign sort_order based on new position
     const updated = newList.map((o, i) => ({ ...o, sortOrder: i }));
@@ -1501,6 +1537,7 @@ export default function App() {
   const isListoActive = listoViews.includes(view);
 
   return (
+    <AppContext.Provider value={{ userName: user.name, onToggleImpreso: toggleImpreso }}>
     <div style={S.app}>
       <header style={S.header}>
         <div style={S.headerInner}>
@@ -1873,6 +1910,7 @@ export default function App() {
         unreadPrivate={unreadPrivate}
       />
     </div>
+    </AppContext.Provider>
   );
 }
 
@@ -2624,7 +2662,11 @@ function SubView({ orders, isAdmin, onApprove, onDeliver, onRevision, onDetail, 
   const [dragSection, setDragSection] = useState(null);
   const filtered = fv === "Todos" ? [...orders] : orders.filter(o => o.vendedor === fv);
   const enD = filtered.filter(o => o.stage === "diseno");
-  const enP = filtered.filter(o => o.stage === "produccion");
+  // En Producción se ordena por fecha de aprobación del diseño: el que aprobó primero va primero
+  const enP = filtered.filter(o => o.stage === "produccion").sort((a, b) => {
+    if (!a.approvedAt) return 1; if (!b.approvedAt) return -1;
+    return new Date(a.approvedAt) - new Date(b.approvedAt);
+  });
 
   const handleDragStart = (i, section) => { setDragIdx(i); setDragSection(section); };
   const handleDragOver = (e, i, section) => { e.preventDefault(); if (section === dragSection) setDragOverIdx(i); };
@@ -2718,6 +2760,7 @@ function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetai
             <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0, marginLeft: 12 }}>
               <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
               <ActivityButton order={o} />
+              <ImpresoBadge order={o} />
               {canEditOrders && <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onEdit(o)}>✏ Editar</button>}
               <button style={{ ...S.actionBtn, background: "#3B82F6", color: "#fff" }} onClick={() => onRestore(o.id)}>↩ Restaurar</button>
               <button style={{ ...S.actionBtn, background: "#059669", color: "#fff" }} onClick={() => onMarkListo(o.id)}>✓ Marcar listo</button>
