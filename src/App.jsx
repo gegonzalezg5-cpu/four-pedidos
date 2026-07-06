@@ -31,6 +31,12 @@ const LOGO_IMG = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1B
 const SELLERS = ["Angelica Gonzalez","Diego Gonzalez","Enrique Diaz","Genaro Gonzalez","Lucía Rampinelli","Miguel Gonzalez","Patricio Mansilla","Paulo Riquelme","Ricardo Parrague"];
 const SPORTS  = ["Fútbol","Basketball","Volleyball","Atletismo","Natación","Tenis","Rugby","Otro"];
 const ESTAMPADORES = ["Rodrigo","Amanda","David"];
+// Devuelve el nombre de vendedor (de la lista) que corresponde a una cuenta, calzando por primer nombre
+function vendedorDeCuenta(userName) {
+  const fn = (userName || "").trim().toLowerCase().split(/\s+/)[0];
+  const match = SELLERS.find(s => s.toLowerCase().split(/\s+/)[0] === fn);
+  return match || userName || "";
+}
 const AppContext = createContext({ userName: "", onToggleImpreso: null });
 // Legacy fallback key (used if Supabase is unavailable)
 const STORAGE_KEY = "foursport_v6";
@@ -1016,9 +1022,13 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
                 </div>
                 <div>
                   <label style={S.label}>Vendedor</label>
-                  <select style={{ ...S.input, marginTop: 5 }} value={editForm.vendedor} onChange={e => setEditForm({...editForm, vendedor: e.target.value})}>
-                    {SELLERS.map(v => <option key={v}>{v}</option>)}
-                  </select>
+                  {isAdmin ? (
+                    <select style={{ ...S.input, marginTop: 5 }} value={editForm.vendedor} onChange={e => setEditForm({...editForm, vendedor: e.target.value})}>
+                      {SELLERS.map(v => <option key={v}>{v}</option>)}
+                    </select>
+                  ) : (
+                    <input style={{ ...S.input, marginTop: 5, background: "#F3F4F6", color: "#6B7280" }} value={editForm.vendedor} readOnly />
+                  )}
                 </div>
                 <div>
                   <label style={S.label}>Deporte</label>
@@ -1130,7 +1140,7 @@ const todayStr = chileDateStr();
 const nowStr   = chileTimeStr();
 const baseForm = { cliente: "", notaVenta: "", vendedor: SELLERS[0], deporte: SPORTS[0], cantidad: "", cantidadEstampados: "", valor: "", notas: "", files: [], filesNota: [], filesMaqueta: [], fechaEnvio: todayStr, horaEnvio: nowStr, express: false };
 
-function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, editOrder = null }) {
+function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, editOrder = null, currentUserName = "" }) {
   const [tipo, setTipo]     = useState(editOrder?.type || null);
   const [form, setForm]     = useState(editOrder ? {
     cliente:    editOrder.cliente    || "",
@@ -1147,7 +1157,7 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
     fechaEnvio: editOrder.fechaEnvio || todayStr,
     horaEnvio:  editOrder.horaEnvio  || nowStr,
     express:    editOrder.express    || false,
-  } : { ...baseForm, fechaEnvio: chileDateStr(), horaEnvio: chileTimeStr() });
+  } : { ...baseForm, vendedor: isAdmin ? baseForm.vendedor : vendedorDeCuenta(currentUserName), fechaEnvio: chileDateStr(), horaEnvio: chileTimeStr() });
   const [saving, setSaving] = useState(false);
   const isEdit = !!editOrder;
 
@@ -1212,9 +1222,13 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
                 <Field label="Cliente *"><input style={S.input} value={form.cliente} placeholder="Nombre del cliente" onChange={e => setForm({ ...form, cliente: e.target.value })} /></Field>
                 <Field label="N° Nota de Venta *"><input style={S.input} value={form.notaVenta} placeholder="Ej: 000123" onChange={e => setForm({ ...form, notaVenta: e.target.value })} /></Field>
                 <Field label="Vendedor *">
-                  <select style={S.input} value={form.vendedor} onChange={e => setForm({ ...form, vendedor: e.target.value })}>
-                    {SELLERS.map(v => <option key={v}>{v}</option>)}
-                  </select>
+                  {isAdmin ? (
+                    <select style={S.input} value={form.vendedor} onChange={e => setForm({ ...form, vendedor: e.target.value })}>
+                      {SELLERS.map(v => <option key={v}>{v}</option>)}
+                    </select>
+                  ) : (
+                    <input style={{ ...S.input, background: "#F3F4F6", color: "#6B7280" }} value={form.vendedor} readOnly title="Se asigna automáticamente a tu cuenta" />
+                  )}
                 </Field>
                 <Field label="Deporte">
                   <select style={S.input} value={form.deporte} onChange={e => setForm({ ...form, deporte: e.target.value })}>
@@ -2072,6 +2086,7 @@ export default function App() {
           onEditRevision={editRevisionOrder}
           isAdmin={isAdmin}
           editOrder={editOrder}
+          currentUserName={user?.name || ""}
         />
       )}
 
@@ -3041,8 +3056,8 @@ function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetai
               <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
               <ActivityButton order={o} />
               {canEditOrders && <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onEdit(o)}>✏ Editar</button>}
-              <button style={{ ...S.actionBtn, background: "#3B82F6", color: "#fff" }} onClick={() => onRestore(o.id)}>↩ Restaurar</button>
-              <button style={{ ...S.actionBtn, background: "#059669", color: "#fff" }} onClick={() => onMarkListo(o.id)}>✓ Marcar listo</button>
+              {isAdmin && <button style={{ ...S.actionBtn, background: "#3B82F6", color: "#fff" }} onClick={() => onRestore(o.id)}>↩ Restaurar</button>}
+              {isAdmin && <button style={{ ...S.actionBtn, background: "#059669", color: "#fff" }} onClick={() => onMarkListo(o.id)}>✓ Marcar listo</button>}
             </div>
           </div>
         ))
