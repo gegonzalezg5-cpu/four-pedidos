@@ -667,6 +667,22 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
   const [rechazandoExcl, setRechazandoExcl] = useState(false);
   const [fechaComprometida, setFechaComprometida] = useState("");
   const [savingExcl, setSavingExcl] = useState(false);
+  const [editingNotas, setEditingNotas] = useState(false);
+  const [notasDraft, setNotasDraft] = useState(order.notas || "");
+  const [savingNotas, setSavingNotas] = useState(false);
+  // Puede editar notas: el vendedor dueño si está en revisión, o los admins aprobadores en cualquier momento
+  const puedeEditarNotas = (ownsOrder && order.status === "revision") || puedeAprobarExclusiva(currentUser?.name);
+
+  const guardarNotas = async () => {
+    setSavingNotas(true);
+    const nuevaActividad = addActividad(order, currentUser?.name || "Usuario", "Editó las notas/comentarios");
+    const updated = { ...order, notas: notasDraft, actividad: nuevaActividad };
+    await supabase.from("pedidos").update({ notas: notasDraft || null, actividad: nuevaActividad }).eq("id", order.id);
+    setOrder(updated);
+    if (onSaveFiles) onSaveFiles(updated);
+    setEditingNotas(false);
+    setSavingNotas(false);
+  };
 
   const solicitarExclusiva = async () => {
     setSavingExcl(true);
@@ -850,6 +866,27 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
     setTimeout(() => { w.focus(); w.print(); }, 300);
   };
 
+  const [previewImg, setPreviewImg] = useState(null);
+
+  const descargarArchivo = async (f) => {
+    if (!f.url) return;
+    try {
+      const resp = await fetch(f.url);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = f.name || "archivo";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      // Si falla el fetch (CORS u otro), abrir en pestaña como respaldo
+      window.open(f.url, "_blank");
+    }
+  };
+
   const FileList = ({ files, label, color = "#3B82F6", bg = "#EFF6FF", editable, fileList, setFileList }) => {
     if (!files || files.length === 0) {
       if (editable) return (
@@ -874,10 +911,14 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
               <span style={{ fontSize: 10, fontWeight: 700, color, background: bg, padding: "2px 8px", borderRadius: 4, border: `1px solid ${color}44` }}>
                 {f.type?.includes("image") ? "IMAGEN" : f.type?.includes("pdf") ? "PDF" : f.name?.split('.').pop()?.toUpperCase() || "ARCHIVO"}
               </span>
-              {f.url
-                ? <a href={f.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "#fff", background: color, textDecoration: "none", padding: "6px 14px", borderRadius: 6, whiteSpace: "nowrap" }}>↓ Descargar</a>
-                : <span style={{ fontSize: 11, color: "#9CA3AF", fontStyle: "italic" }}>sin URL</span>
-              }
+              {f.url ? (
+                <>
+                  {f.type?.includes("image") && (
+                    <button onClick={() => setPreviewImg(f)} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: color, background: "#fff", border: `1px solid ${color}`, cursor: "pointer", padding: "6px 12px", borderRadius: 6, whiteSpace: "nowrap" }}>👁 Vista previa</button>
+                  )}
+                  <button onClick={() => descargarArchivo(f)} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "#fff", background: color, border: "none", cursor: "pointer", padding: "6px 14px", borderRadius: 6, whiteSpace: "nowrap" }}>↓ Descargar</button>
+                </>
+              ) : <span style={{ fontSize: 11, color: "#9CA3AF", fontStyle: "italic" }}>sin URL</span>}
               {editable && (
                 <button onClick={() => removeFile(fileList, setFileList, f)} style={{ background: "#FEE2E2", border: "none", color: "#DC2626", borderRadius: 5, width: 28, height: 28, cursor: "pointer", fontWeight: 800, fontSize: 14, flexShrink: 0 }} title="Eliminar archivo">✕</button>
               )}
@@ -988,13 +1029,28 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
           </div>
 
           {/* Notas del vendedor */}
-          {order.notas && (
+          {(order.notas || puedeEditarNotas) && (
             <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                 <div style={{ fontSize: 10, fontWeight: 800, color: "#6B7280", letterSpacing: "0.08em" }}>📝 NOTAS / COMENTARIOS</div>
-                <button onClick={imprimirNotas} style={{ fontSize: 12, fontWeight: 700, color: "#111827", background: "#fff", border: "1px solid #D1D5DB", borderRadius: 6, padding: "5px 12px", cursor: "pointer" }}>🖨 Imprimir</button>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {puedeEditarNotas && !editingNotas && (
+                    <button onClick={() => { setNotasDraft(order.notas || ""); setEditingNotas(true); }} style={{ fontSize: 12, fontWeight: 700, color: "#0369A1", background: "#F0F9FF", border: "1px solid #BAE6FD", borderRadius: 6, padding: "5px 12px", cursor: "pointer" }}>✏ Editar</button>
+                  )}
+                  {order.notas && <button onClick={imprimirNotas} style={{ fontSize: 12, fontWeight: 700, color: "#111827", background: "#fff", border: "1px solid #D1D5DB", borderRadius: 6, padding: "5px 12px", cursor: "pointer" }}>🖨 Imprimir</button>}
+                </div>
               </div>
-              <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{order.notas}</div>
+              {editingNotas ? (
+                <div>
+                  <textarea style={{ ...S.input, height: 90, resize: "vertical", width: "100%", boxSizing: "border-box" }} value={notasDraft} onChange={e => setNotasDraft(e.target.value)} placeholder="Escribe las notas o comentarios del pedido..." />
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <button onClick={guardarNotas} disabled={savingNotas} style={{ ...S.btnPrimary, background: "#0369A1", padding: "8px 16px", fontSize: 13 }}>{savingNotas ? "Guardando..." : "✓ Guardar"}</button>
+                    <button onClick={() => setEditingNotas(false)} style={{ ...S.btnGhost, padding: "8px 14px" }}>Cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: order.notas ? "#374151" : "#9CA3AF", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{order.notas || "Sin notas. Puedes agregar una con ✏ Editar."}</div>
+              )}
             </div>
           )}
 
@@ -1131,6 +1187,18 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
           <button style={S.btnGhost} onClick={onClose}>Cerrar</button>
         </div>
       </div>
+
+      {/* Modal de vista previa de imagen */}
+      {previewImg && (
+        <div onClick={() => setPreviewImg(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 600, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+            <span style={{ color: "#fff", fontSize: 14, fontWeight: 700 }}>{previewImg.name}</span>
+            <button onClick={e => { e.stopPropagation(); descargarArchivo(previewImg); }} style={{ background: "#fff", color: "#111827", border: "none", borderRadius: 6, padding: "6px 14px", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>↓ Descargar</button>
+            <button onClick={() => setPreviewImg(null)} style={{ background: "rgba(255,255,255,0.15)", color: "#fff", border: "none", borderRadius: 6, width: 34, height: 34, cursor: "pointer", fontSize: 18 }}>✕</button>
+          </div>
+          <img src={previewImg.url} alt={previewImg.name} onClick={e => e.stopPropagation()} style={{ maxWidth: "90vw", maxHeight: "80vh", objectFit: "contain", borderRadius: 8, boxShadow: "0 12px 48px rgba(0,0,0,0.5)" }} />
+        </div>
+      )}
     </div>
   );
 }
@@ -2073,7 +2141,7 @@ export default function App() {
         })()}
         {view === "revision"        && <RevisionView orders={data.revision || []} isAdmin={isAdmin} onRestore={restoreFromRevision} onMarkListo={id => setConfirm({ type: "rev", id, action: "deliver" })} onEdit={o => setEditOrder(o)} onDetail={o => setDetailOrder(o)} canEditOrders={user?.name?.toLowerCase().includes("genaro") || user?.email?.toLowerCase().includes("genaro")} />}
         {view === "listo_pendiente" && <ListoPendienteView orders={data.listo || []} onEntregado={id => setConfirm({ type: "listo", id, action: "despachar" })} onDetail={o => setDetailOrder(o)} />}
-        {view === "listo_entregado" && <ListoEntregadoView orders={data.delivered || []} onDetail={o => setDetailOrder(o)} />}
+        {view === "listo_entregado" && <ListoEntregadoView orders={data.delivered || []} onDetail={o => setDetailOrder(o)} isAdmin={isAdmin} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} />}
         {view === "usuarios"        && isAdmin && <UsuariosView currentUser={user} />}
       </main>
 
@@ -3135,7 +3203,7 @@ function ListoPendienteView({ orders, onEntregado, onDetail }) {
 }
 
 // ─── LISTO: ENTREGADO ─────────────────────────────────────────────────────────
-function ListoEntregadoView({ orders, onDetail }) {
+function ListoEntregadoView({ orders, onDetail, isAdmin, onDelete }) {
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
@@ -3185,6 +3253,10 @@ function ListoEntregadoView({ orders, onDetail }) {
                 <div style={{ fontSize: 10, color: "#9CA3AF", letterSpacing: "0.06em", marginTop: 2 }}>VALOR PEDIDO</div>
               </div>
               <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
+              <ActivityButton order={o} />
+              {isAdmin && onDelete && (
+                <button style={{ ...S.actionBtn, background: "#FEE2E2", color: "#DC2626", border: "1px solid #FECACA", fontWeight: 800 }} onClick={() => onDelete(o.id)} title="Eliminar pedido">✕ Eliminar</button>
+              )}
             </div>
           </div>
         ))
