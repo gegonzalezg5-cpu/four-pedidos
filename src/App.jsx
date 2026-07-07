@@ -234,15 +234,25 @@ function fechaEntregaEfectiva(o) {
   if (o.type === "four") return o.deadline;
   return o.stage === "produccion" ? o.deadlineProduccion : o.deadlineDiseno;
 }
-// Comparador central: TODO se ordena por fecha de entrega (el que se entrega primero, arriba).
-// La fecha de entrega manda: express (deadline corto) y excepciones (fecha comprometida) suben solos.
+// Rango de prioridad dentro de un mismo día de entrega: excepción < express < normal
+function rangoPrioridad(o) {
+  if (o.exclusivaEstado === "aprobada") return 0; // excepción aprobada
+  if (o.type === "four" && o.express) return 1;   // express
+  return 2;                                        // normal
+}
+// Comparador central: se ordena por DÍA de entrega (el que se entrega primero, arriba).
+// Dentro del mismo día: excepciones y express arriba; el resto por hora de ingreso (más antiguo primero).
 function compareOrders(a, b) {
   const da = fechaEntregaEfectiva(a), db = fechaEntregaEfectiva(b);
-  if (da && db) { const d = new Date(da) - new Date(db); if (d !== 0) return d; }
-  else if (da && !db) return -1;
-  else if (!da && db) return 1;
-  // Empate de fecha de entrega: respeta orden manual y luego fecha de ingreso
-  return (a.sortOrder || 0) - (b.sortOrder || 0) || new Date(a.createdAt) - new Date(b.createdAt);
+  const dayA = da ? chileDateStr(da) : null;
+  const dayB = db ? chileDateStr(db) : null;
+  if (dayA && dayB && dayA !== dayB) return dayA < dayB ? -1 : 1;
+  if (dayA && !dayB) return -1;
+  if (!dayA && dayB) return 1;
+  // Mismo día de entrega: prioridad (excepción/express) y luego hora de ingreso ascendente
+  const ra = rangoPrioridad(a), rb = rangoPrioridad(b);
+  if (ra !== rb) return ra - rb;
+  return new Date(a.createdAt) - new Date(b.createdAt);
 }
 function inPeriod(dateStr, period, from, to) {
   if (period === "todo") return true;
