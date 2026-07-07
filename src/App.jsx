@@ -229,12 +229,19 @@ function esExclusivaHoy(o) {
   if (o.exclusivaEstado !== "aprobada" || !o.exclusivaFecha) return false;
   return chileDateStr() >= chileDateStr(o.exclusivaFecha);
 }
-// Comparador central: exclusivas del día primero, luego orden normal
+// Fecha de entrega efectiva de un pedido (la exclusiva ya reemplazó el deadline al aprobarse)
+function fechaEntregaEfectiva(o) {
+  if (o.type === "four") return o.deadline;
+  return o.stage === "produccion" ? o.deadlineProduccion : o.deadlineDiseno;
+}
+// Comparador central: TODO se ordena por fecha de entrega (el que se entrega primero, arriba).
+// La fecha de entrega manda: express (deadline corto) y excepciones (fecha comprometida) suben solos.
 function compareOrders(a, b) {
-  const ea = esExclusivaHoy(a) ? 0 : 1;
-  const eb = esExclusivaHoy(b) ? 0 : 1;
-  if (ea !== eb) return ea - eb;
-  if (ea === 0) { const d = new Date(a.exclusivaFecha) - new Date(b.exclusivaFecha); if (d !== 0) return d; }
+  const da = fechaEntregaEfectiva(a), db = fechaEntregaEfectiva(b);
+  if (da && db) { const d = new Date(da) - new Date(db); if (d !== 0) return d; }
+  else if (da && !db) return -1;
+  else if (!da && db) return 1;
+  // Empate de fecha de entrega: respeta orden manual y luego fecha de ingreso
   return (a.sortOrder || 0) - (b.sortOrder || 0) || new Date(a.createdAt) - new Date(b.createdAt);
 }
 function inPeriod(dateStr, period, from, to) {
@@ -673,6 +680,18 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
   // Puede editar notas: el vendedor dueño si está en revisión, o los admins aprobadores en cualquier momento
   const puedeEditarNotas = (ownsOrder && order.status === "revision") || puedeAprobarExclusiva(currentUser?.name);
 
+  const [avisoRevision, setAvisoRevision] = useState(false);
+  // Si un vendedor (dueño, no admin) guarda cambios estando en revisión: notifica al diseñador y avisa
+  const avisarCorreccionRevision = async () => {
+    if (order.status !== "revision" || isAdmin) return;
+    const destinatarios = new Set(["Cristian"]);
+    if (order.revisionBy) destinatarios.add(order.revisionBy);
+    for (const d of destinatarios) {
+      await createNotification({ para: d, tipo: "correccion", titulo: `Correcciones en: ${order.cliente}`, mensaje: `${currentUser?.name} corrigió el pedido en revisión. Revísalo para aprobarlo y restablecerlo.`, pedidoId: order.id });
+    }
+    setAvisoRevision(true);
+  };
+
   const guardarNotas = async () => {
     setSavingNotas(true);
     const nuevaActividad = addActividad(order, currentUser?.name || "Usuario", "Editó las notas/comentarios");
@@ -682,6 +701,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
     if (onSaveFiles) onSaveFiles(updated);
     setEditingNotas(false);
     setSavingNotas(false);
+    await avisarCorreccionRevision();
   };
 
   const solicitarExclusiva = async () => {
@@ -799,6 +819,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
     if (onSaveFiles) onSaveFiles(updated);
     setEditingInfo(false);
     setSaving(false);
+    await avisarCorreccionRevision();
   };
 
   const saveFiles = async () => {
@@ -827,6 +848,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
     if (onSaveFiles) onSaveFiles(updated);
     setEditingFiles(false);
     setSaving(false);
+    await avisarCorreccionRevision();
   };
 
   const removeFile = async (fileList, setFileList, f) => {
@@ -1188,6 +1210,22 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
         </div>
       </div>
 
+      {/* Aviso de corrección en revisión */}
+      {avisoRevision && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 650, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={() => setAvisoRevision(false)}>
+          <div style={{ ...S.confirmModal, maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 40, textAlign: "center", marginBottom: 8 }}>📨</div>
+            <div style={{ ...S.confirmTitle, textAlign: "center" }}>Cambios guardados</div>
+            <div style={{ fontSize: 14, color: "#4B5563", lineHeight: 1.6, textAlign: "center", marginTop: 8 }}>
+              El diseñador será notificado con tus cambios para revisarlos, aprobarlos y restablecer el pedido. No puedes restablecerlo tú directamente mientras está en revisión.
+            </div>
+            <div style={{ display: "flex", justifyContent: "center", marginTop: 20 }}>
+              <button style={{ ...S.btnPrimary, background: "#111827", padding: "10px 28px" }} onClick={() => setAvisoRevision(false)}>Entendido</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal de vista previa de imagen */}
       {previewImg && (
         <div onClick={() => setPreviewImg(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 600, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
@@ -1492,6 +1530,7 @@ export default function App() {
   const pedidosRef                    = useRef(null);
   const listoRef                      = useRef(null);
   const notifsRef                     = useRef(null);
+  const origFaviconRef                = useRef(null);
 
   useEffect(() => {
     try {
@@ -1583,6 +1622,7 @@ export default function App() {
     return () => { supabase.removeChannel(ch); };
   }, [user?.name]);
 
+
   const handleLogin = (u) => {
     setUser(u);
     try { sessionStorage.setItem("fs_user", JSON.stringify(u)); } catch {}
@@ -1618,6 +1658,25 @@ export default function App() {
     markPrivateRead(user.name, otherName).then(() => loadPrivateMessages(user.name).then(setPrivMessages));
   };
   const unreadPrivate = privMessages.filter(m => m.para === user?.name && !m.leida).length;
+
+  // Pestaña en rojo (título + favicon) cuando hay notificaciones/mensajes pendientes
+  useEffect(() => {
+    let link = document.querySelector("link[rel~='icon']");
+    if (link && origFaviconRef.current === null) origFaviconRef.current = link.href;
+    const pendientes = notifs.filter(n => !n.leida).length + (unreadPrivate || 0) + (unreadChat || 0);
+    document.title = pendientes > 0 ? `🔴 (${pendientes}) Four Sport` : "Four Sport";
+    if (!link) { link = document.createElement("link"); link.rel = "icon"; document.head.appendChild(link); }
+    if (pendientes > 0) {
+      const c = document.createElement("canvas"); c.width = 64; c.height = 64;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#EF4444"; ctx.beginPath(); ctx.arc(32, 32, 30, 0, 2 * Math.PI); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.font = "bold 38px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(String(pendientes > 9 ? "9+" : pendientes), 32, 35);
+      link.href = c.toDataURL("image/png");
+    } else if (origFaviconRef.current) {
+      link.href = origFaviconRef.current;
+    }
+  }, [notifs, unreadPrivate, unreadChat]);
 
   const persist = useCallback(async (nd, changedOrders = []) => {
     setData(nd);
@@ -1945,17 +2004,22 @@ export default function App() {
                 if (!notifsOpen && notifs.some(n => !n.leida)) {
                   markAllNotificationsRead(user.name).then(() => loadNotifications(user.name).then(setNotifs));
                 }
-              }} style={{ position: "relative", background: "none", border: "none", cursor: "pointer", fontSize: 20, padding: 4, lineHeight: 1 }}>
+              }} style={{ position: "relative", background: "none", border: "none", cursor: "pointer", fontSize: 24, padding: 4, lineHeight: 1 }}>
                 🔔
                 {notifs.filter(n => !n.leida).length > 0 && (
-                  <span style={{ position: "absolute", top: 0, right: 0, background: "#EF4444", color: "#fff", fontSize: 9, fontWeight: 800, minWidth: 16, height: 16, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>
+                  <span style={{ position: "absolute", top: -6, right: -6, background: "#EF4444", color: "#fff", fontSize: 12, fontWeight: 900, minWidth: 22, height: 22, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 6px", border: "2px solid #111827", boxShadow: "0 0 0 2px #EF4444" }}>
                     {notifs.filter(n => !n.leida).length}
                   </span>
                 )}
               </button>
               {notifsOpen && (
-                <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, width: 340, maxHeight: 420, overflowY: "auto", zIndex: 300, boxShadow: "0 12px 32px rgba(0,0,0,0.18)" }}>
-                  <div style={{ padding: "14px 16px", borderBottom: "1px solid #F3F4F6", fontWeight: 800, fontSize: 13, color: "#111827", fontFamily: "NikeFutura, Montserrat, sans-serif", letterSpacing: "0.06em" }}>NOTIFICACIONES</div>
+                <div style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 14, width: 440, maxWidth: "calc(100vw - 32px)", maxHeight: 560, overflowY: "auto", zIndex: 300, boxShadow: "0 16px 44px rgba(0,0,0,0.22)" }}>
+                  <div style={{ padding: "18px 20px", borderBottom: "1px solid #F3F4F6", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
+                    <span style={{ fontWeight: 900, fontSize: 16, color: "#111827", fontFamily: "NikeFutura, Montserrat, sans-serif", letterSpacing: "0.06em" }}>NOTIFICACIONES</span>
+                    {notifs.filter(n => !n.leida).length > 0
+                      ? <span style={{ background: "#EF4444", color: "#fff", fontSize: 13, fontWeight: 900, padding: "4px 12px", borderRadius: 12 }}>{notifs.filter(n => !n.leida).length} pendiente{notifs.filter(n => !n.leida).length > 1 ? "s" : ""}</span>
+                      : <span style={{ background: "#DCFCE7", color: "#15803D", fontSize: 12, fontWeight: 700, padding: "4px 12px", borderRadius: 12 }}>Al día ✓</span>}
+                  </div>
                   {notifs.length === 0 ? (
                     <div style={{ padding: "32px 16px", textAlign: "center", color: "#D1D5DB", fontSize: 13 }}>Sin notificaciones</div>
                   ) : notifs.map(n => {
@@ -3023,12 +3087,7 @@ function SubView({ orders, isAdmin, onApprove, onDeliver, onRevision, onDetail, 
   const filtered = fv === "Todos" ? [...orders] : orders.filter(o => o.vendedor === fv);
   const enD = filtered.filter(o => o.stage === "diseno").sort(compareOrders);
   // En Producción se ordena por fecha de aprobación del diseño: el que aprobó primero va primero
-  const enP = filtered.filter(o => o.stage === "produccion").sort((a, b) => {
-    const ea = esExclusivaHoy(a) ? 0 : 1, eb = esExclusivaHoy(b) ? 0 : 1;
-    if (ea !== eb) return ea - eb;
-    if (!a.approvedAt) return 1; if (!b.approvedAt) return -1;
-    return new Date(a.approvedAt) - new Date(b.approvedAt);
-  });
+  const enP = filtered.filter(o => o.stage === "produccion").sort(compareOrders);
 
   const handleDragStart = (i, section) => { setDragIdx(i); setDragSection(section); };
   const handleDragOver = (e, i, section) => { e.preventDefault(); if (section === dragSection) setDragOverIdx(i); };
