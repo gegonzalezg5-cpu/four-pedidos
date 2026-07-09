@@ -305,6 +305,7 @@ function rowToOrder(row) {
     actividad:         row.actividad || [],
     impreso:           row.impreso || false,
     maquetaEstado:     row.maqueta_estado || null,
+    maquetaComentarios: row.maqueta_comentarios || [],
     maquetaAjustes:    row.maqueta_ajustes || null,
     exclusivaEstado:   row.exclusiva_estado || null,
     exclusivaFecha:    row.exclusiva_fecha || null,
@@ -351,6 +352,7 @@ function orderToRow(o) {
     actividad:           o.actividad || [],
     impreso:             o.impreso || false,
     maqueta_estado:      o.maquetaEstado || null,
+    maqueta_comentarios: o.maquetaComentarios || [],
     maqueta_ajustes:     o.maquetaAjustes || null,
     exclusiva_estado:    o.exclusivaEstado || null,
     exclusiva_fecha:     o.exclusivaFecha || null,
@@ -749,6 +751,25 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
     setAjustesTexto("");
     setSavingMaqueta(false);
   };
+
+  const [comentarioMaqueta, setComentarioMaqueta] = useState("");
+  const [savingComentario, setSavingComentario] = useState(false);
+  const agregarComentarioMaqueta = async () => {
+    const txt = comentarioMaqueta.trim();
+    if (!txt) return;
+    setSavingComentario(true);
+    const nuevo = { t: new Date().toISOString(), u: currentUser?.name || "Usuario", m: txt };
+    const comentarios = [...(order.maquetaComentarios || []), nuevo];
+    const updated = { ...order, maquetaComentarios: comentarios };
+    await supabase.from("pedidos").update({ maqueta_comentarios: comentarios }).eq("id", order.id);
+    // Notificar a la contraparte
+    const destino = esDisenador ? order.vendedor : "Cristian";
+    createNotification({ para: destino, tipo: "maqueta", titulo: `Comentario de maqueta: ${order.cliente}`, mensaje: `${currentUser?.name}: ${txt}`, pedidoId: order.id });
+    setOrder(updated);
+    if (onSaveFiles) onSaveFiles(updated);
+    setComentarioMaqueta("");
+    setSavingComentario(false);
+  };
   // Si un vendedor (dueño, no admin) guarda cambios estando en revisión: notifica al diseñador y avisa
   const avisarCorreccionRevision = async () => {
     if (order.status !== "revision" || isAdmin) return;
@@ -1100,6 +1121,38 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
                 <div style={{ fontSize: 13, color: "#6B7280" }}>
                   Maqueta enviada. Esperando la respuesta del vendedor/cliente.
                   <button onClick={() => { setMaquetaDraft(order.filesMaqueta || []); setEditandoMaqueta(true); }} style={{ marginLeft: 10, fontSize: 12, fontWeight: 700, color: "#7C3AED", background: "#fff", border: "1px solid #DDD6FE", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>✏ Reemplazar maqueta</button>
+                </div>
+              )}
+
+              {/* Hilo de comentarios diseñador ↔ vendedor */}
+              {(esDisenador || ownsOrder || isAdmin) && (
+                <div style={{ marginTop: 12, borderTop: "1px dashed #E9D5FF", paddingTop: 12 }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: "#7C3AED", letterSpacing: "0.06em", marginBottom: 8 }}>💬 COMENTARIOS Y OBSERVACIONES</div>
+                  {(order.maquetaComentarios || []).length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10, maxHeight: 220, overflowY: "auto" }}>
+                      {(order.maquetaComentarios || []).map((c, i) => {
+                        const mio = c.u === currentUser?.name;
+                        return (
+                          <div key={i} style={{ alignSelf: mio ? "flex-end" : "flex-start", maxWidth: "85%" }}>
+                            <div style={{ background: mio ? "#7C3AED" : "#fff", color: mio ? "#fff" : "#374151", border: mio ? "none" : "1px solid #E9D5FF", borderRadius: 10, padding: "8px 12px", fontSize: 13, lineHeight: 1.5, wordBreak: "break-word" }}>{c.m}</div>
+                            <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 2, textAlign: mio ? "right" : "left" }}><b>{c.u}</b> · {fmtDateTime(c.t)}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {(esDisenador || ownsOrder) && (
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input value={comentarioMaqueta} onChange={e => setComentarioMaqueta(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); agregarComentarioMaqueta(); } }}
+                        placeholder="Escribe un comentario u observación..."
+                        style={{ flex: 1, padding: "9px 13px", borderRadius: 8, border: "1px solid #E9D5FF", fontSize: 13, outline: "none", fontFamily: "Montserrat, sans-serif", background: "#fff" }} />
+                      <button onClick={agregarComentarioMaqueta} disabled={savingComentario || !comentarioMaqueta.trim()}
+                        style={{ background: comentarioMaqueta.trim() ? "#7C3AED" : "#E5E7EB", color: comentarioMaqueta.trim() ? "#fff" : "#9CA3AF", border: "none", borderRadius: 8, padding: "9px 16px", fontWeight: 700, fontSize: 13, cursor: comentarioMaqueta.trim() ? "pointer" : "default" }}>
+                        {savingComentario ? "..." : "Enviar"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
