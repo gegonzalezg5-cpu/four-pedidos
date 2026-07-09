@@ -1444,6 +1444,10 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
   } : { ...baseForm, vendedor: isAdmin ? baseForm.vendedor : vendedorDeCuenta(currentUserName), fechaEnvio: chileDateStr(), horaEnvio: chileTimeStr() });
   const [saving, setSaving] = useState(false);
   const isEdit = !!editOrder;
+  const [confirmClose, setConfirmClose] = useState(false);
+  // ¿Hay datos escritos que se perderían al cerrar?
+  const hayDatos = !!(form.cliente || form.notaVenta || form.cantidad || form.valor || form.notas || (form.files || []).length || (form.filesNota || []).length || (form.filesMaqueta || []).length);
+  const solicitarCierre = () => { if (hayDatos && !isEdit) setConfirmClose(true); else onClose(); };
 
   const h = form.horaEnvio ? parseInt(form.horaEnvio.split(":")[0], 10) : 0;
   const fourPrev = tipo === "four" && form.fechaEnvio ? calcDeadlineFour(form.fechaEnvio, form.horaEnvio, form.express) : null;
@@ -1475,11 +1479,11 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
   };
 
   return (
-    <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div style={S.overlay} onClick={e => e.target === e.currentTarget && solicitarCierre()}>
       <div style={S.bigModal}>
         <div style={S.bigModalHeader}>
           <span style={{ fontWeight: 900, fontSize: 14, color: "#111827", letterSpacing: "0.06em" }}>{isEdit ? "✏ EDITAR PEDIDO" : "NUEVO PEDIDO"}</span>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "#9CA3AF", fontSize: 18, cursor: "pointer" }}>✕</button>
+          <button onClick={solicitarCierre} style={{ background: "none", border: "none", color: "#9CA3AF", fontSize: 18, cursor: "pointer" }}>✕</button>
         </div>
         <div style={S.bigModalBody}>
           {/* Tipo */}
@@ -1582,7 +1586,7 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
           )}
         </div>
         <div style={S.bigModalFooter}>
-          <button style={S.btnGhost} onClick={onClose}>Cancelar</button>
+          <button style={S.btnGhost} onClick={solicitarCierre}>Cancelar</button>
           {dateError && <span style={{ color: "#DC2626", fontSize: 12, fontWeight: 600, marginRight: 12, alignSelf: "center" }}>{dateError}</span>}
           <button style={!canSubmit || saving ? S.btnDisabled : { ...S.btnPrimary, background: tipo === "sub" ? "#7C3AED" : "#111827" }}
             onClick={submit} disabled={!canSubmit || saving}>
@@ -1590,6 +1594,23 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
           </button>
         </div>
       </div>
+
+      {/* Confirmación de cierre con datos sin guardar */}
+      {confirmClose && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={e => e.stopPropagation()}>
+          <div style={{ ...S.confirmModal, maxWidth: 380 }}>
+            <div style={{ fontSize: 38, textAlign: "center", marginBottom: 8 }}>⚠️</div>
+            <div style={{ ...S.confirmTitle, textAlign: "center" }}>¿Cerrar sin guardar?</div>
+            <div style={{ fontSize: 14, color: "#4B5563", lineHeight: 1.6, textAlign: "center", marginTop: 8 }}>
+              Tienes información ingresada que se perderá si cierras esta ventana.
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 20 }}>
+              <button style={{ ...S.btnPrimary, background: "#111827", padding: "10px 20px" }} onClick={() => setConfirmClose(false)}>Seguir ingresando</button>
+              <button style={{ background: "#fff", color: "#DC2626", border: "1px solid #FCA5A5", borderRadius: 8, padding: "10px 20px", fontSize: 13, fontWeight: 700, cursor: "pointer" }} onClick={() => { setConfirmClose(false); onClose(); }}>Sí, cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
