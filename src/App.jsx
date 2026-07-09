@@ -304,6 +304,8 @@ function rowToOrder(row) {
     sortOrder:         row.sort_order || 0,
     actividad:         row.actividad || [],
     impreso:           row.impreso || false,
+    maquetaEstado:     row.maqueta_estado || null,
+    maquetaAjustes:    row.maqueta_ajustes || null,
     exclusivaEstado:   row.exclusiva_estado || null,
     exclusivaFecha:    row.exclusiva_fecha || null,
     exclusivaSolicita: row.exclusiva_solicita || null,
@@ -348,6 +350,8 @@ function orderToRow(o) {
     sort_order:          o.sortOrder || 0,
     actividad:           o.actividad || [],
     impreso:             o.impreso || false,
+    maqueta_estado:      o.maquetaEstado || null,
+    maqueta_ajustes:     o.maquetaAjustes || null,
     exclusiva_estado:    o.exclusivaEstado || null,
     exclusiva_fecha:     o.exclusivaFecha || null,
     exclusiva_solicita:  o.exclusivaSolicita || null,
@@ -623,6 +627,11 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDet
           <span style={{ fontWeight: 900, fontSize: 18, color: "#111827", textTransform: "uppercase", letterSpacing: "0.02em" }}>{order.cliente}</span>
           {isFour && order.express && <span style={S.chipExpress}>⚡ EXPRESS</span>}
           {!isFour && <span style={{ ...S.chip, background: order.stage === "diseno" ? "#FEE2E2" : "#FEF3C7", color: order.stage === "diseno" ? "#DC2626" : "#D97706" }}>{order.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN"}</span>}
+          {order.type === "sub" && order.stage === "diseno" && !order.listoAt && (
+            order.maquetaEstado === "revision" ? <span style={{ ...S.chip, background: "#DBEAFE", color: "#1D4ED8" }}>🖼 MAQUETA EN REVISIÓN</span>
+            : order.maquetaEstado === "ajustes" ? <span style={{ ...S.chip, background: "#FEE2E2", color: "#DC2626" }}>🔧 MAQUETA EN AJUSTES</span>
+            : <span style={{ ...S.chip, background: "#F3F4F6", color: "#6B7280" }}>⏳ ESPERANDO MAQUETA</span>
+          )}
           {exclusivaAprobada && <span style={{ ...S.chip, background: "#EDE9FE", color: "#6D28D9", fontWeight: 800 }}>⭐ EXCLUSIVO {order.exclusivaFecha ? fmtDate(order.exclusivaFecha) : ""}</span>}
           {order.exclusivaEstado === "pendiente" && <span style={{ ...S.chip, background: "#FEF9C3", color: "#A16207" }}>⭐ EXCLUSIVA PENDIENTE</span>}
           {order.listoAt && !order.deliveredAt && <span style={{ ...S.chip, background: "#DCFCE7", color: "#15803D" }}>✓ LISTO</span>}
@@ -691,6 +700,55 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
   const puedeEditarNotas = (ownsOrder && order.status === "revision") || puedeAprobarExclusiva(currentUser?.name);
 
   const [avisoRevision, setAvisoRevision] = useState(false);
+
+  // ── Flujo de maqueta (sublimados en diseño) ──
+  const fn = (currentUser?.name || "").trim().toLowerCase().split(/\s+/)[0];
+  const esDisenador = fn === "cristian" || fn === "diseñador" || fn === "disenador";
+  const esSubDiseno = order.type === "sub" && order.stage === "diseno" && !order.listoAt && !order.deliveredAt;
+  const [maquetaDraft, setMaquetaDraft] = useState(order.filesMaqueta || []);
+  const [editandoMaqueta, setEditandoMaqueta] = useState(false);
+  const [pidiendoAjustes, setPidiendoAjustes] = useState(false);
+  const [ajustesTexto, setAjustesTexto] = useState("");
+  const [savingMaqueta, setSavingMaqueta] = useState(false);
+
+  const enviarMaquetaRevision = async () => {
+    if (!maquetaDraft.length) return;
+    setSavingMaqueta(true);
+    const nuevaActividad = addActividad(order, currentUser?.name || "Usuario", "Subió la maqueta y la envió a revisión del cliente");
+    const updated = { ...order, filesMaqueta: maquetaDraft, maquetaEstado: "revision", maquetaAjustes: null, actividad: nuevaActividad };
+    await supabase.from("pedidos").update({ files_maqueta: maquetaDraft, maqueta_estado: "revision", maqueta_ajustes: null, actividad: nuevaActividad }).eq("id", order.id);
+    createNotification({ para: order.vendedor, tipo: "maqueta", titulo: `Maqueta lista: ${order.cliente}`, mensaje: `${currentUser?.name} subió la maqueta. Envíasela al cliente y aprueba o solicita ajustes.`, pedidoId: order.id });
+    setOrder(updated);
+    if (onSaveFiles) onSaveFiles(updated);
+    setEditandoMaqueta(false);
+    setSavingMaqueta(false);
+  };
+
+  const aprobarMaqueta = async () => {
+    setSavingMaqueta(true);
+    const now = new Date().toISOString();
+    const nuevaActividad = addActividad(order, currentUser?.name || "Usuario", "Aprobó la maqueta (cliente conforme) — pasó a producción");
+    const updated = { ...order, stage: "produccion", approvedAt: now, deadlineProduccion: calcDeadlineSubProduccion(now).toISOString(), maquetaEstado: "aprobada", actividad: nuevaActividad };
+    await supabase.from("pedidos").update({ stage: "produccion", approved_at: now, deadline_produccion: updated.deadlineProduccion, maqueta_estado: "aprobada", actividad: nuevaActividad }).eq("id", order.id);
+    createNotification({ para: "Cristian", tipo: "maqueta", titulo: `Maqueta aprobada: ${order.cliente}`, mensaje: `${currentUser?.name} aprobó la maqueta. El pedido pasó a producción.`, pedidoId: order.id });
+    setOrder(updated);
+    if (onSaveFiles) onSaveFiles(updated);
+    setSavingMaqueta(false);
+  };
+
+  const solicitarAjustesMaqueta = async () => {
+    if (!ajustesTexto.trim()) return;
+    setSavingMaqueta(true);
+    const nuevaActividad = addActividad(order, currentUser?.name || "Usuario", `Solicitó ajustes a la maqueta: ${ajustesTexto.trim()}`);
+    const updated = { ...order, maquetaEstado: "ajustes", maquetaAjustes: ajustesTexto.trim(), actividad: nuevaActividad };
+    await supabase.from("pedidos").update({ maqueta_estado: "ajustes", maqueta_ajustes: ajustesTexto.trim(), actividad: nuevaActividad }).eq("id", order.id);
+    createNotification({ para: "Cristian", tipo: "maqueta", titulo: `Ajustes de maqueta: ${order.cliente}`, mensaje: `${currentUser?.name} pide ajustes: ${ajustesTexto.trim()}`, pedidoId: order.id });
+    setOrder(updated);
+    if (onSaveFiles) onSaveFiles(updated);
+    setPidiendoAjustes(false);
+    setAjustesTexto("");
+    setSavingMaqueta(false);
+  };
   // Si un vendedor (dueño, no admin) guarda cambios estando en revisión: notifica al diseñador y avisa
   const avisarCorreccionRevision = async () => {
     if (order.status !== "revision" || isAdmin) return;
@@ -1010,6 +1068,63 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
             {order.estampador && <Row label="Estampador" value={order.estampador} bold />}
             {order.deliveredAt && <Row label="Entregado" value={`${fmtDate(order.deliveredAt)} · por ${order.despachador}`} />}
           </div>
+
+          {/* ── Flujo de maqueta (sublimado en diseño) ── */}
+          {esSubDiseno && (
+            <div style={{ marginBottom: 20, background: "#FAF5FF", border: "1px solid #E9D5FF", borderRadius: 10, padding: "14px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: "#7C3AED", letterSpacing: "0.06em" }}>🎨 MAQUETA</div>
+                {order.maquetaEstado === "revision" && <span style={{ ...S.chip, background: "#DBEAFE", color: "#1D4ED8" }}>🖼 EN REVISIÓN DEL CLIENTE</span>}
+                {order.maquetaEstado === "ajustes" && <span style={{ ...S.chip, background: "#FEE2E2", color: "#DC2626" }}>🔧 EN AJUSTES</span>}
+                {!order.maquetaEstado && <span style={{ ...S.chip, background: "#F3F4F6", color: "#6B7280" }}>⏳ ESPERANDO MAQUETA</span>}
+              </div>
+
+              {order.maquetaEstado === "ajustes" && order.maquetaAjustes && (
+                <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "10px 12px", marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: "#B91C1C", marginBottom: 4 }}>AJUSTES SOLICITADOS</div>
+                  <div style={{ fontSize: 13, color: "#7F1D1D", lineHeight: 1.5 }}>{order.maquetaAjustes}</div>
+                </div>
+              )}
+
+              {/* Diseñador: subir/actualizar maqueta y enviar a revisión */}
+              {esDisenador && (order.maquetaEstado !== "revision" || editandoMaqueta) && (
+                <div>
+                  <FileUploadBlock files={maquetaDraft} onChange={setMaquetaDraft} label="🎨 Maquetas digitales" hint="Adjunta la maqueta para el cliente" accent="#7C3AED" />
+                  <button onClick={enviarMaquetaRevision} disabled={savingMaqueta || !maquetaDraft.length}
+                    style={{ ...S.btnPrimary, background: maquetaDraft.length ? "#7C3AED" : "#E5E7EB", color: maquetaDraft.length ? "#fff" : "#9CA3AF", padding: "10px 18px", fontSize: 13, cursor: maquetaDraft.length ? "pointer" : "default" }}>
+                    {savingMaqueta ? "Enviando..." : "📤 Enviar a revisión de maqueta"}
+                  </button>
+                </div>
+              )}
+              {esDisenador && order.maquetaEstado === "revision" && !editandoMaqueta && (
+                <div style={{ fontSize: 13, color: "#6B7280" }}>
+                  Maqueta enviada. Esperando la respuesta del vendedor/cliente.
+                  <button onClick={() => { setMaquetaDraft(order.filesMaqueta || []); setEditandoMaqueta(true); }} style={{ marginLeft: 10, fontSize: 12, fontWeight: 700, color: "#7C3AED", background: "#fff", border: "1px solid #DDD6FE", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>✏ Reemplazar maqueta</button>
+                </div>
+              )}
+
+              {/* Vendedor dueño: aprobar o pedir ajustes cuando está en revisión */}
+              {ownsOrder && order.maquetaEstado === "revision" && (
+                <div style={{ marginTop: 4 }}>
+                  <div style={{ fontSize: 13, color: "#4B5563", marginBottom: 10 }}>Envíale la maqueta al cliente. Cuando responda:</div>
+                  {!pidiendoAjustes ? (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button onClick={aprobarMaqueta} disabled={savingMaqueta} style={{ ...S.btnPrimary, background: "#059669", padding: "10px 18px", fontSize: 13 }}>{savingMaqueta ? "..." : "✓ Aprobar maqueta (pasa a producción)"}</button>
+                      <button onClick={() => setPidiendoAjustes(true)} style={{ background: "#fff", color: "#DC2626", border: "1px solid #FCA5A5", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>✗ Solicitar ajustes</button>
+                    </div>
+                  ) : (
+                    <div>
+                      <textarea value={ajustesTexto} onChange={e => setAjustesTexto(e.target.value)} placeholder="Describe los ajustes que pide el cliente..." style={{ ...S.input, height: 80, resize: "vertical", width: "100%", boxSizing: "border-box" }} />
+                      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                        <button onClick={solicitarAjustesMaqueta} disabled={savingMaqueta || !ajustesTexto.trim()} style={{ ...S.btnPrimary, background: ajustesTexto.trim() ? "#DC2626" : "#E5E7EB", color: ajustesTexto.trim() ? "#fff" : "#9CA3AF", padding: "8px 16px", fontSize: 13 }}>{savingMaqueta ? "..." : "Enviar ajustes"}</button>
+                        <button onClick={() => { setPidiendoAjustes(false); setAjustesTexto(""); }} style={{ ...S.btnGhost, padding: "8px 14px" }}>Cancelar</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Entrega exclusiva ── */}
           <div style={{ marginBottom: 20 }}>
