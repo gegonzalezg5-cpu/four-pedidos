@@ -195,6 +195,29 @@ function addWorkdays(date, days) {
   while (added < days) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) added++; }
   return d;
 }
+
+// Limpieza automática: borra adjuntos 7 días hábiles después de marcarse LISTO.
+// Se conservan las fotos del producto terminado (files_foto).
+const DIAS_RETENCION_ARCHIVOS = 7;
+async function limpiarArchivosAntiguos(pedidos) {
+  const ahora = new Date();
+  const candidatos = (pedidos || []).filter(o => {
+    if (!o.listoAt || o.archivosBorrados) return false;
+    const tiene = (o.files?.length || 0) + (o.filesMaqueta?.length || 0) + (o.filesNota?.length || 0);
+    if (!tiene) return false;
+    return ahora >= addWorkdays(new Date(o.listoAt), DIAS_RETENCION_ARCHIVOS);
+  });
+  for (const o of candidatos) {
+    try {
+      const paths = [...(o.files || []), ...(o.filesMaqueta || []), ...(o.filesNota || [])]
+        .filter(f => f && f.path).map(f => f.path);
+      if (paths.length) await supabase.storage.from("archivos").remove(paths);
+      const actividad = [...(o.actividad || []), { t: new Date().toISOString(), u: "Sistema", a: `Archivos eliminados automáticamente (${DIAS_RETENCION_ARCHIVOS} días hábiles tras marcarse listo)` }];
+      await supabase.from("pedidos").update({ files: [], files_maqueta: [], files_nota: [], archivos_borrados: true, actividad }).eq("id", o.id);
+    } catch (e) { console.warn("Limpieza de archivos falló:", e); }
+  }
+  return candidatos.length;
+}
 function calcDeadlineFour(fe, ho, express) {
   const hour = ho ? parseInt(ho.split(":")[0], 10) : 0;
   const extraDay = hour >= 15 ? 1 : 0;
@@ -296,6 +319,10 @@ function rowToOrder(row) {
     revisionAt:        row.revision_at,
     revisionRazon:     row.revision_razon,
     revisionBy:        row.revision_by,
+    revisionEstado:    row.revision_estado || null,
+    revisionCorregidoAt: row.revision_corregido_at || null,
+    filesFoto:         row.files_foto || [],
+    archivosBorrados:  row.archivos_borrados || false,
     createdAt:         row.created_at,
     status:            row.status,
     files:             row.files || [],
@@ -343,6 +370,10 @@ function orderToRow(o) {
     revision_at:         o.revisionAt || null,
     revision_razon:      o.revisionRazon || null,
     revision_by:         o.revisionBy || null,
+    revision_estado:     o.revisionEstado || null,
+    revision_corregido_at: o.revisionCorregidoAt || null,
+    files_foto:          o.filesFoto || [],
+    archivos_borrados:   o.archivosBorrados || false,
     created_at:          o.createdAt || new Date().toISOString(),
     status:              o.status || "active",
     files:               o.files || [],
@@ -770,14 +801,25 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
     setComentarioMaqueta("");
     setSavingComentario(false);
   };
-  // Si un vendedor (dueño, no admin) guarda cambios estando en revisión: notifica al diseñador y avisa
-  const avisarCorreccionRevision = async () => {
-    if (order.status !== "revision" || isAdmin) return;
+  // Al guardar cambios en un pedido en revisión: solo recuerda avisar (sin notificar aún)
+  const avisarCorreccionRevision = async () => { return; };
+
+  // Botón explícito: el vendedor declara que ya corrigió → la pelota pasa al diseñador
+  const [savingCorregido, setSavingCorregido] = useState(false);
+  const marcarComoCorregido = async () => {
+    setSavingCorregido(true);
+    const now = new Date().toISOString();
+    const nuevaActividad = addActividad(order, currentUser?.name || "Usuario", "Marcó las correcciones como listas — enviado al diseñador");
+    const updated = { ...order, revisionEstado: "corregido", revisionCorregidoAt: now, actividad: nuevaActividad };
+    await supabase.from("pedidos").update({ revision_estado: "corregido", revision_corregido_at: now, actividad: nuevaActividad }).eq("id", order.id);
     const destinatarios = new Set(["Cristian"]);
     if (order.revisionBy) destinatarios.add(order.revisionBy);
     for (const d of destinatarios) {
-      await createNotification({ para: d, tipo: "correccion", titulo: `Correcciones en: ${order.cliente}`, mensaje: `${currentUser?.name} corrigió el pedido en revisión. Revísalo para aprobarlo y restablecerlo.`, pedidoId: order.id });
+      await createNotification({ para: d, tipo: "correccion", titulo: `Corregido: ${order.cliente}`, mensaje: `${currentUser?.name} terminó las correcciones. Revísalo para aprobarlo y restablecerlo.`, pedidoId: order.id });
     }
+    setOrder(updated);
+    if (onSaveFiles) onSaveFiles(updated);
+    setSavingCorregido(false);
     setAvisoRevision(true);
   };
 
@@ -1256,10 +1298,25 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
 
           {/* Revision */}
           {order.revisionRazon && (
-            <div style={{ background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
-              <div style={{ fontSize: 10, fontWeight: 800, color: "#B45309", letterSpacing: "0.08em", marginBottom: 6 }}>MOTIVO DE REVISIÓN</div>
-              <div style={{ fontSize: 13, color: "#92400E", lineHeight: 1.6 }}>{order.revisionRazon}</div>
-              {order.revisionBy && <div style={{ fontSize: 11, color: "#D97706", marginTop: 6 }}>Por: {order.revisionBy} · {fmtDate(order.revisionAt)}</div>}
+            <div style={{ background: order.revisionEstado === "corregido" ? "#ECFDF5" : "#FEF3C7", border: `1px solid ${order.revisionEstado === "corregido" ? "#6EE7B7" : "#FCD34D"}`, borderRadius: 10, padding: "14px 16px", marginBottom: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: order.revisionEstado === "corregido" ? "#047857" : "#B45309", letterSpacing: "0.08em" }}>MOTIVO DE REVISIÓN</div>
+                {order.revisionEstado === "corregido"
+                  ? <span style={{ ...S.chip, background: "#D1FAE5", color: "#047857" }}>🟢 CORREGIDO · ESPERANDO AL DISEÑADOR</span>
+                  : <span style={{ ...S.chip, background: "#FEE2E2", color: "#DC2626" }}>🔴 ESPERANDO CORRECCIÓN DEL VENDEDOR</span>}
+              </div>
+              <div style={{ fontSize: 13, color: order.revisionEstado === "corregido" ? "#065F46" : "#92400E", lineHeight: 1.6 }}>{order.revisionRazon}</div>
+              {order.revisionBy && <div style={{ fontSize: 11, color: order.revisionEstado === "corregido" ? "#059669" : "#D97706", marginTop: 6 }}>Por: {order.revisionBy} · {fmtDate(order.revisionAt)}</div>}
+              {order.revisionEstado === "corregido" && order.revisionCorregidoAt && (
+                <div style={{ fontSize: 11, color: "#059669", marginTop: 4 }}>Corregido el {fmtDateTime(order.revisionCorregidoAt)}</div>
+              )}
+              {/* Botón del vendedor dueño: declarar corregido */}
+              {ownsOrder && order.status === "revision" && order.revisionEstado !== "corregido" && (
+                <button onClick={marcarComoCorregido} disabled={savingCorregido}
+                  style={{ ...S.btnPrimary, background: "#059669", padding: "10px 18px", fontSize: 13, marginTop: 12 }}>
+                  {savingCorregido ? "Enviando..." : "✅ Ya lo corregí, enviar al diseñador"}
+                </button>
+              )}
             </div>
           )}
 
@@ -1360,6 +1417,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
               <FileList files={order.files} label="📎 Logos y números" color="#3B82F6" bg="#EFF6FF" />
               <FileList files={order.filesMaqueta} label="🎨 Maquetas digitales" color="#7C3AED" bg="#F5F3FF" />
               <FileList files={order.filesNota} label="📄 Nota de venta" color="#F59E0B" bg="#FFFBEB" />
+              <FileList files={order.filesFoto} label="📸 Fotos del producto terminado" color="#059669" bg="#ECFDF5" />
               {(!order.files?.length && !order.filesNota?.length) && (
                 <div style={{ textAlign: "center", padding: "24px", color: "#D1D5DB", fontSize: 13, background: "#F9FAFB", borderRadius: 10 }}>
                   Sin archivos adjuntos en este pedido
@@ -1479,7 +1537,7 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
   };
 
   return (
-    <div style={S.overlay} onClick={e => e.target === e.currentTarget && solicitarCierre()}>
+    <div style={S.overlay}>
       <div style={S.bigModal}>
         <div style={S.bigModalHeader}>
           <span style={{ fontWeight: 900, fontSize: 14, color: "#111827", letterSpacing: "0.06em" }}>{isEdit ? "✏ EDITAR PEDIDO" : "NUEVO PEDIDO"}</span>
@@ -1710,6 +1768,7 @@ export default function App() {
   const [editOrder, setEditOrder]     = useState(null);
   const [detailOrder, setDetailOrder] = useState(null);
   const [confirm, setConfirm]         = useState(null);
+  const [fotoModal, setFotoModal]     = useState(null); // pedido recién marcado listo
   const [pedidosOpen, setPedidosOpen] = useState(false);
   const [listoOpen, setListoOpen]     = useState(false);
   const [notifs, setNotifs]           = useState([]);
@@ -1738,9 +1797,14 @@ export default function App() {
     } catch {}
 
     // Load from Supabase
-    loadDataFromSupabase().then(d => {
+    loadDataFromSupabase().then(async d => {
       setData(d);
       setLoading(false);
+      // Limpieza automática de adjuntos con más de 7 días hábiles desde "listo"
+      try {
+        const borrados = await limpiarArchivosAntiguos([...(d.listo || []), ...(d.delivered || [])]);
+        if (borrados > 0) loadDataFromSupabase().then(setData);
+      } catch {}
     });
 
     // Real-time subscription for cross-device sync
@@ -1915,13 +1979,8 @@ export default function App() {
     const list = type === "four" ? data.four : type === "sub" ? data.sub : (data.revision || []);
     const order = list.find(o => o.id === id);
     if (!order) return;
-    // Borrar archivos del Storage para ahorrar memoria (logos, maquetas, nota de venta)
-    const allFiles = [...(order.files || []), ...(order.filesMaqueta || []), ...(order.filesNota || [])];
-    const paths = allFiles.filter(f => f && f.path).map(f => f.path);
-    if (paths.length > 0) {
-      try { await supabase.storage.from("archivos").remove(paths); } catch (e) { console.warn("No se pudieron borrar archivos:", e); }
-    }
-    const updated = { ...order, listoAt: new Date().toISOString(), status: "listo", estampador: estampador || order.estampador || null, files: [], filesMaqueta: [], filesNota: [], actividad: addActividad(order, user.name, `Marcó como listo${estampador ? " (estampador: " + estampador + ")" : ""}`) };
+    // Los archivos NO se borran aquí: se eliminan automáticamente 7 días hábiles después de marcarse listo
+    const updated = { ...order, listoAt: new Date().toISOString(), status: "listo", estampador: estampador || order.estampador || null, actividad: addActividad(order, user.name, `Marcó como listo${estampador ? " (estampador: " + estampador + ")" : ""}`) };
     const newData = {
       ...data,
       four: data.four.filter(o => o.id !== id),
@@ -1939,6 +1998,8 @@ export default function App() {
       pedidoId: order.id,
     });
     setConfirm(null);
+    // Ofrecer subir foto del producto terminado (opcional)
+    if (isAdmin) setFotoModal(updated);
   };
   const despachar = (id) => {
     const order = (data.listo || []).find(o => o.id === id);
@@ -1955,7 +2016,7 @@ export default function App() {
     const list = type === "four" ? data.four : data.sub;
     const order = list.find(o => o.id === id);
     if (!order) return;
-    const updated = { ...order, revisionAt: new Date().toISOString(), revisionRazon: razon.trim(), revisionBy: user.name, status: "revision", actividad: addActividad(order, user.name, `Envió a revisión${razon.trim() ? ": " + razon.trim() : ""}`) };
+    const updated = { ...order, revisionAt: new Date().toISOString(), revisionRazon: razon.trim(), revisionBy: user.name, status: "revision", revisionEstado: "pendiente", revisionCorregidoAt: null, actividad: addActividad(order, user.name, `Envió a revisión${razon.trim() ? ": " + razon.trim() : ""}`) };
     persist({
       ...data,
       four: data.four.filter(o => o.id !== id),
@@ -1975,7 +2036,7 @@ export default function App() {
   const restoreFromRevision = id => {
     const order = data.revision.find(o => o.id === id);
     if (!order) return;
-    const updated = { ...order, status: "active", revisionAt: null, revisionRazon: null, revisionBy: null, actividad: addActividad(order, user.name, "Restauró el pedido desde revisión") };
+    const updated = { ...order, status: "active", revisionAt: null, revisionRazon: null, revisionBy: null, revisionEstado: null, revisionCorregidoAt: null, actividad: addActividad(order, user.name, "Restauró el pedido desde revisión") };
     const newData = { ...data, revision: data.revision.filter(o => o.id !== id) };
     if (order.type === "four") {
       // Reinsert in original position by createdAt
@@ -2506,6 +2567,23 @@ export default function App() {
           }));
         }} />}
 
+      {/* ── Modal foto del producto terminado ── */}
+      {fotoModal && (
+        <FotoProductoModal
+          order={fotoModal}
+          userName={user.name}
+          onClose={() => setFotoModal(null)}
+          onSaved={upd => {
+            setData(prev => {
+              const nd = { ...prev };
+              for (const k of ["four","sub","revision","listo","delivered"]) nd[k] = (prev[k] || []).map(o => o.id === upd.id ? upd : o);
+              saveData(nd);
+              return nd;
+            });
+          }}
+        />
+      )}
+
       {/* ── Modal cambiar clave ── */}
       {showPassModal && (
         <ChangePasswordModal
@@ -2534,6 +2612,43 @@ export default function App() {
       />
     </div>
     </AppContext.Provider>
+  );
+}
+
+// ─── SUBIR FOTO DEL PRODUCTO TERMINADO ────────────────────────────────────────
+function FotoProductoModal({ order, onClose, onSaved, userName }) {
+  const [fotos, setFotos] = useState(order.filesFoto || []);
+  const [saving, setSaving] = useState(false);
+
+  const guardar = async () => {
+    setSaving(true);
+    const actividad = [...(order.actividad || []), { t: new Date().toISOString(), u: userName || "Usuario", a: `Subió ${fotos.length} foto(s) del producto terminado` }];
+    const updated = { ...order, filesFoto: fotos, actividad };
+    await supabase.from("pedidos").update({ files_foto: fotos, actividad }).eq("id", order.id);
+    if (onSaved) onSaved(updated);
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <div style={S.overlay}>
+      <div style={{ ...S.confirmModal, maxWidth: 480 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+          <div style={S.confirmTitle}>📸 Foto del producto terminado</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#9CA3AF", fontSize: 20, cursor: "pointer" }}>✕</button>
+        </div>
+        <div style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.6, marginBottom: 14 }}>
+          <b style={{ color: "#111827", textTransform: "uppercase" }}>{order.cliente}</b> quedó listo. Si quieres, saca una foto de las prendas terminadas — muchos clientes las piden. Es opcional, puedes cerrar esta ventana.
+        </div>
+        <FileUploadBlock files={fotos} onChange={setFotos} label="📸 Fotos del producto" hint="Toma una foto o elige desde tu galería" accent="#059669" />
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+          <button style={S.btnGhost} onClick={onClose}>Ahora no</button>
+          <button style={fotos.length && !saving ? { ...S.btnPrimary, background: "#059669" } : S.btnDisabled} disabled={!fotos.length || saving} onClick={guardar}>
+            {saving ? "Guardando..." : "✓ Guardar fotos"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -3353,12 +3468,19 @@ function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetai
       <h2 style={S.pageTitle}>Falta Revisión</h2>
       {orders.length === 0
         ? <div style={S.emptyCard}>No hay pedidos en revisión</div>
-        : orders.map(o => (
-          <div key={o.id} style={{ ...S.orderCard, borderLeft: "3px solid #F59E0B", background: "#FFFBEB" }}>
+        : [...orders].sort((a, b) => {
+            const ca = a.revisionEstado === "corregido" ? 0 : 1;
+            const cb = b.revisionEstado === "corregido" ? 0 : 1;
+            if (ca !== cb) return ca - cb;
+            return new Date(a.revisionAt || 0) - new Date(b.revisionAt || 0);
+          }).map(o => (
+          <div key={o.id} style={{ ...S.orderCard, borderLeft: `3px solid ${o.revisionEstado === "corregido" ? "#059669" : "#F59E0B"}`, background: o.revisionEstado === "corregido" ? "#ECFDF5" : "#FFFBEB" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
                 <span style={{ fontWeight: 800, fontSize: 15, color: "#111827", textTransform: "uppercase" }}>{o.cliente}</span>
-                <span style={{ ...S.chip, background: "#FEF3C7", color: "#D97706" }}>⚠ REVISIÓN</span>
+                {o.revisionEstado === "corregido"
+                  ? <span style={{ ...S.chip, background: "#D1FAE5", color: "#047857", fontWeight: 800 }}>🟢 CORREGIDO · TE TOCA</span>
+                  : <span style={{ ...S.chip, background: "#FEE2E2", color: "#DC2626" }}>🔴 ESPERANDO AL VENDEDOR</span>}
                 <span style={{ ...S.chip, background: o.type === "four" ? "#EFF6FF" : (o.stage === "diseno" ? "#FEE2E2" : "#FEF3C7"), color: o.type === "four" ? "#3B82F6" : (o.stage === "diseno" ? "#DC2626" : "#D97706") }}>{o.type === "four" ? "FOUR" : (o.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN")}</span>
               </div>
               <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexWrap: "wrap" }}>
@@ -3462,17 +3584,29 @@ function ListoPendienteView({ orders, onEntregado, onDetail }) {
 
 // ─── LISTO: ENTREGADO ─────────────────────────────────────────────────────────
 function ListoEntregadoView({ orders, onDetail, isAdmin, onDelete }) {
+  const [fv, setFv] = useState("Todos");
+  const vendedores = ["Todos", ...Array.from(new Set(orders.map(o => o.vendedor).filter(Boolean))).sort()];
+  const filtrados = fv === "Todos" ? orders : orders.filter(o => o.vendedor === fv);
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ ...S.pageTitle, margin: 0 }}>Entregado</h2>
-        <p style={{ fontSize: 12, color: "#9CA3AF", margin: "4px 0 0", fontFamily: "Montserrat, sans-serif" }}>
-          Registro completo de todos los pedidos entregados al cliente.
-        </p>
+      <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+        <div>
+          <h2 style={{ ...S.pageTitle, margin: 0 }}>Entregado</h2>
+          <p style={{ fontSize: 12, color: "#9CA3AF", margin: "4px 0 0", fontFamily: "Montserrat, sans-serif" }}>
+            Registro completo de todos los pedidos entregados al cliente.
+          </p>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", letterSpacing: "0.06em" }}>VENDEDOR</span>
+          <select value={fv} onChange={e => setFv(e.target.value)} style={{ ...S.select, minWidth: 190 }}>
+            {vendedores.map(v => <option key={v}>{v}</option>)}
+          </select>
+          <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 700 }}>{filtrados.length} pedido{filtrados.length !== 1 ? "s" : ""}</span>
+        </div>
       </div>
-      {orders.length === 0
-        ? <div style={S.emptyCard}>No hay pedidos entregados aún</div>
-        : orders.map(o => (
+      {filtrados.length === 0
+        ? <div style={S.emptyCard}>{fv === "Todos" ? "No hay pedidos entregados aún" : `Sin pedidos entregados de ${fv}`}</div>
+        : filtrados.map(o => (
           <div key={o.id} style={{ ...S.orderCard, borderLeft: "3px solid #374151" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
