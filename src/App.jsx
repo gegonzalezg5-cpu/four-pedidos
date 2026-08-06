@@ -2358,9 +2358,9 @@ export default function App() {
                 </div>
               )}
             </div>
-            <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>{user.name}</span>
-            <button onClick={() => setShowPassModal(true)} title="Cambiar clave" style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontFamily: "Montserrat, sans-serif", fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}>⚙ Clave</button>
-            <button onClick={handleLogout} style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "1px solid #374151", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontFamily: "Montserrat, sans-serif", fontWeight: 600 }}>Salir</button>
+            <span style={{ fontSize: 13, color: "#FFFFFF", fontWeight: 700 }}>{user.name}</span>
+            <button onClick={() => setShowPassModal(true)} title="Cambiar clave" style={{ fontSize: 13, color: "#FFFFFF", background: "none", border: "1px solid #6B7280", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontFamily: "Montserrat, sans-serif", fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>⚙ Clave</button>
+            <button onClick={handleLogout} style={{ fontSize: 13, color: "#FFFFFF", background: "none", border: "1px solid #6B7280", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontFamily: "Montserrat, sans-serif", fontWeight: 700 }}>Salir</button>
           </div>
         </div>
       </header>
@@ -3868,8 +3868,8 @@ const S = {
   app:  { minHeight: "100vh", background: "#F9FAFB", fontFamily: "Montserrat, sans-serif", color: "#111827" },
   header: { background: "#111827", borderBottom: "1px solid #1F2937", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 2px 12px rgba(0,0,0,0.22)" },
   headerInner: { width: "100%", padding: "0 40px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 80, gap: 20, boxSizing: "border-box" },
-  navBtn: { padding: "10px 20px", background: "transparent", color: "#6B7280", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 15, fontWeight: 700, letterSpacing: "0.08em", whiteSpace: "nowrap", fontFamily: "NikeFutura, Montserrat, sans-serif" },
-  navBtnActive: { color: "#F9FAFB", background: "#1F2937" },
+  navBtn: { padding: "10px 20px", background: "transparent", color: "#FFFFFF", border: "none", borderRadius: 7, cursor: "pointer", fontSize: 16, fontWeight: 800, letterSpacing: "0.08em", whiteSpace: "nowrap", fontFamily: "NikeFutura, Montserrat, sans-serif" },
+  navBtnActive: { color: "#FFFFFF", background: "#374151" },
   main: { width: "100%", padding: "32px 40px 90px", boxSizing: "border-box" },
   pageTitle: { fontSize: 24, fontWeight: 900, color: "#111827", letterSpacing: "-0.01em", margin: "0 0 20px", fontFamily: "NikeFutura, Montserrat, sans-serif" },
   card: { background: "#fff", borderRadius: 14, padding: 24, border: "1px solid #E5E7EB" },
