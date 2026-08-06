@@ -90,10 +90,12 @@ function saveUsers(users) {
 }
 
 // ─── NOTIFICATION HELPERS ─────────────────────────────────────────────────────
+// Clave de destinatario: primer nombre en minúscula, para que "Lucía Rampinelli" y "Lucía" coincidan
+function notifKey(name) { return (name || "").trim().toLowerCase().split(/\s+/)[0]; }
 async function createNotification({ para, tipo, titulo, mensaje, pedidoId }) {
   try {
     const { error } = await supabase.from("notificaciones").insert({
-      para, tipo, titulo, mensaje: mensaje || null, pedido_id: pedidoId || null,
+      para: notifKey(para), tipo, titulo, mensaje: mensaje || null, pedido_id: pedidoId || null,
     });
     if (error) throw error;
     return true;
@@ -105,7 +107,7 @@ async function createNotification({ para, tipo, titulo, mensaje, pedidoId }) {
 async function loadNotifications(name) {
   try {
     const { data, error } = await supabase.from("notificaciones")
-      .select("*").eq("para", name).order("created_at", { ascending: false }).limit(50);
+      .select("*").in("para", [notifKey(name), name]).order("created_at", { ascending: false }).limit(50);
     if (error) throw error;
     return data || [];
   } catch (e) {
@@ -117,7 +119,7 @@ async function markNotificationRead(id) {
   try { await supabase.from("notificaciones").update({ leida: true }).eq("id", id); } catch {}
 }
 async function markAllNotificationsRead(name) {
-  try { await supabase.from("notificaciones").update({ leida: true }).eq("para", name).eq("leida", false); } catch {}
+  try { await supabase.from("notificaciones").update({ leida: true }).in("para", [notifKey(name), name]).eq("leida", false); } catch {}
 }
 
 // ─── CHAT HELPERS ─────────────────────────────────────────────────────────────
@@ -1769,6 +1771,7 @@ export default function App() {
   const [detailOrder, setDetailOrder] = useState(null);
   const [confirm, setConfirm]         = useState(null);
   const [fotoModal, setFotoModal]     = useState(null); // pedido recién marcado listo
+  const [maquetaAviso, setMaquetaAviso] = useState(null); // aviso de maqueta nueva para el vendedor
   const [pedidosOpen, setPedidosOpen] = useState(false);
   const [listoOpen, setListoOpen]     = useState(false);
   const [notifs, setNotifs]           = useState([]);
@@ -1843,7 +1846,7 @@ export default function App() {
     const ch = supabase
       .channel("notif-changes")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notificaciones" }, payload => {
-        if (payload.new && payload.new.para === user.name) playBeep();
+        if (payload.new && notifKey(payload.new.para) === notifKey(user.name)) playBeep();
         loadNotifications(user.name).then(setNotifs);
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "notificaciones" }, () => {
@@ -1921,6 +1924,24 @@ export default function App() {
     markPrivateRead(user.name, otherName).then(() => loadPrivateMessages(user.name).then(setPrivMessages));
   };
   const unreadPrivate = privMessages.filter(m => m.para === user?.name && !m.leida).length;
+
+  // Aviso emergente: maquetas nuevas esperando a este vendedor
+  useEffect(() => {
+    if (!user?.name) return;
+    const mios = (data.sub || []).filter(o =>
+      o.stage === "diseno" && o.maquetaEstado === "revision" &&
+      notifKey(o.vendedor) === notifKey(user.name)
+    );
+    if (!mios.length) return;
+    let vistos = [];
+    try { vistos = JSON.parse(localStorage.getItem("fs_maquetas_vistas") || "[]"); } catch {}
+    const nuevo = mios.find(o => !vistos.includes(o.id));
+    if (nuevo) {
+      setMaquetaAviso(nuevo);
+      try { localStorage.setItem("fs_maquetas_vistas", JSON.stringify([...vistos, nuevo.id])); } catch {}
+      playBeep();
+    }
+  }, [data.sub, user?.name]);
 
   // Pestaña en rojo (título + favicon) cuando hay notificaciones/mensajes pendientes
   useEffect(() => {
@@ -2566,6 +2587,25 @@ export default function App() {
             delivered: (prev.delivered||[]).map(o => o.id === updated.id ? updated : o),
           }));
         }} />}
+
+      {/* ── Aviso: maqueta nueva esperando al vendedor ── */}
+      {maquetaAviso && (
+        <div style={S.overlay}>
+          <div style={{ ...S.confirmModal, maxWidth: 420 }}>
+            <div style={{ fontSize: 44, textAlign: "center", marginBottom: 8 }}>🎨</div>
+            <div style={{ ...S.confirmTitle, textAlign: "center" }}>¡Maqueta lista para revisar!</div>
+            <div style={{ fontSize: 14, color: "#4B5563", lineHeight: 1.6, textAlign: "center", marginTop: 10 }}>
+              El diseñador subió la maqueta de <b style={{ color: "#111827", textTransform: "uppercase" }}>{maquetaAviso.cliente}</b>.
+              Envíasela al cliente y luego aprueba o solicita ajustes.
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 20, flexWrap: "wrap" }}>
+              <button style={{ ...S.btnPrimary, background: "#7C3AED", padding: "10px 20px" }}
+                onClick={() => { setDetailOrder(maquetaAviso); setMaquetaAviso(null); }}>Ver maqueta ahora</button>
+              <button style={S.btnGhost} onClick={() => setMaquetaAviso(null)}>Más tarde</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal foto del producto terminado ── */}
       {fotoModal && (
