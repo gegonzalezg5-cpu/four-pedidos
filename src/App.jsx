@@ -514,6 +514,77 @@ const GLOBAL_CSS = `
   }
   @keyframes fsSlideUp { from { transform: translateY(14px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   .fs-sheet { animation: fsSlideUp .22s ease-out; }
+
+  /* ── TABLA DE PEDIDOS ───────────────────────────────────────────────── */
+  .t-hoja{background:#fff;border:1px solid #E4E7EC;border-radius:14px;overflow:hidden;margin-bottom:18px}
+  .t-cab,.t-fila{display:grid;gap:14px;align-items:center;padding:0 18px;
+    grid-template-columns:104px minmax(170px,1.3fr) 150px 92px 66px 114px 98px 70px 126px}
+  .t-cab{height:44px;background:#F7F8FA;border-bottom:1px solid #E4E7EC;
+    font-size:12px;font-weight:700;color:#5B6270}
+  .t-der{text-align:right} .t-cen{text-align:center}
+  .t-banda{display:flex;align-items:baseline;gap:10px;padding:13px 18px;background:#EDF0F4;
+    border-top:1px solid #E4E7EC;border-bottom:1px solid #E4E7EC}
+  .t-banda h3{font-size:14.5px;font-weight:800;margin:0;letter-spacing:-.01em;color:#141619}
+  .t-banda span{font-size:12.5px;color:#949BA8;font-weight:600}
+  .t-banda.urg{background:#FCF0E6} .t-banda.urg h3{color:#EC6A1E}
+  .t-fila{min-height:66px;border-bottom:1px solid #F1F3F5;background:#fff;transition:background .12s}
+  .t-fila:hover{background:#FBFCFD}
+  .t-fila.abierta{background:#F7F9FC}
+  .t-nv{display:flex;align-items:center;gap:7px}
+  .t-nv b{font-size:14px;font-weight:700;color:#141619}
+  .t-cli b{display:block;font-size:14.5px;font-weight:700;color:#141619;line-height:1.3;letter-spacing:-.01em}
+  .t-cli i{display:flex;flex-wrap:wrap;align-items:center;gap:5px;row-gap:4px;font-size:12.5px;color:#949BA8;font-style:normal;margin-top:3px}
+  .t-vend{display:flex;align-items:center;gap:8px;min-width:0}
+  .t-vend .t-ini{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;
+    color:#FFFFFF;font-size:11px;font-weight:800;flex:none;line-height:1}
+  .t-vend .t-nom{font-size:13px;font-weight:600;color:#5B6270;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .t-fec b{display:block;font-size:12.5px;font-weight:600;color:#141619;white-space:nowrap}
+  .t-fec span{font-size:12px;color:#949BA8}
+  .t-pre{font-size:13.5px;font-weight:600;color:#5B6270}
+  .t-mon{font-size:14.5px;font-weight:800;color:#141619;letter-spacing:-.02em}
+  .t-btn{border:1px solid #E4E7EC;background:#fff;border-radius:9px;cursor:pointer;padding:0;
+    width:30px;height:30px;display:grid;place-items:center;color:#949BA8;flex:none}
+  .t-btn:hover{border-color:#141619;color:#141619}
+  .t-tick{border:1.5px solid #E4E7EC;background:#fff;border-radius:9px;width:30px;height:30px;
+    display:grid;place-items:center;cursor:pointer;color:#C6CBD3;justify-self:center;padding:0}
+  .t-tick:hover{border-color:#13794F;color:#13794F}
+  .t-tick.si{background:#13794F;border-color:#13794F;color:#fff}
+  .t-acc{display:flex;align-items:center;gap:7px;justify-content:flex-end}
+  .t-ver{border:1px solid #E4E7EC;background:#fff;border-radius:9px;padding:7px 12px;
+    font-family:Montserrat,sans-serif;font-size:12.5px;font-weight:700;color:#141619;cursor:pointer;white-space:nowrap}
+  .t-ver:hover{border-color:#141619;background:#FAFBFC}
+  .t-fila.abierta .t-tog{background:#141619;border-color:#141619;color:#fff}
+  .t-panel{padding:4px 18px 20px;background:#F7F9FC;border-bottom:1px solid #E4E7EC}
+  .t-rej{display:grid;grid-template-columns:1.15fr .85fr;gap:16px;margin-bottom:14px}
+  .t-notas{background:#fff;border:1px solid #E4E7EC;border-left:4px solid #EC6A1E;border-radius:11px;padding:15px 18px;margin-bottom:14px}
+  .t-notas h4{font-size:12.5px;font-weight:700;color:#5B6270;margin:0 0 9px;letter-spacing:.02em}
+  .t-notas p{font-size:14.5px;line-height:1.7;color:#2E3238;white-space:pre-wrap;margin:0;max-width:78ch}
+  .t-notas p.sin{color:#C6CBD3;font-size:13.5px}
+  .t-ajustes{background:#FEF4F2;border:1px solid #FBD5CE;border-radius:9px;padding:11px 14px;margin-top:13px}
+  .t-ajustes b{display:block;font-size:11.5px;color:#B3321A;font-weight:700;margin-bottom:5px}
+  .t-ajustes span{font-size:13.5px;line-height:1.6;color:#5B3730;white-space:pre-wrap}
+  .t-chip{font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:5px;letter-spacing:.02em;white-space:nowrap}
+  .t-clip{position:absolute;top:-6px;right:-6px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:#2B5CE6;color:#fff;font-size:9.5px;font-weight:800;display:flex;align-items:center;justify-content:center;box-sizing:border-box}
+  .t-bloque{background:#fff;border:1px solid #E4E7EC;border-radius:11px;padding:15px}
+  .t-bloque h4{font-size:12.5px;font-weight:700;color:#5B6270;margin:0 0 11px}
+  .t-vacio{padding:46px 20px;text-align:center;color:#C6CBD3;font-size:14px}
+  @media (max-width:860px){
+    .t-cab{display:none}
+    .t-fila{grid-template-columns:1fr auto auto;
+      grid-template-areas:"cli cli plazo" "vend vend nv" "fec mon mon" "acc acc tick";
+      gap:9px 10px;padding:15px 14px;min-height:0}
+    .t-fila .t-pre{display:none}
+    .t-fila .t-cli{grid-area:cli} .t-fila .t-cli b{font-size:15.5px}
+    .t-fila .t-plazo{grid-area:plazo;justify-self:end;align-self:start}
+    .t-fila .t-vend{grid-area:vend}
+    .t-fila .t-nv{grid-area:nv;justify-self:end}
+    .t-fila .t-fec{grid-area:fec;display:flex;align-items:baseline;gap:6px}
+    .t-fila .t-mon{grid-area:mon;justify-self:end;font-size:16px}
+    .t-fila .t-tick{grid-area:tick;justify-self:end}
+    .t-fila .t-acc{grid-area:acc;justify-content:flex-start;margin-top:2px}
+    .t-panel{padding:2px 14px 16px}
+    .t-rej{grid-template-columns:1fr;gap:12px}
+  }
 `;
 function GlobalStyles() {
   useEffect(() => {
@@ -713,6 +784,239 @@ function ActivityButton({ order, compact }) {
       )}
     </>
   );
+}
+
+// ─── TABLA DE PEDIDOS ─────────────────────────────────────────────────────────
+const COLORES_VEND = ["#2B5CE6","#13794F","#6D3BD4","#C2410C","#0E7490","#9D174D","#4D7C0F"];
+function colorVendedor(n){ return COLORES_VEND[[...(n||"?")].reduce((a,ch)=>a+ch.charCodeAt(0),0) % COLORES_VEND.length]; }
+function inicialesDe(n){ return (n||"?").trim().split(/\s+/).slice(0,2).map(p=>p[0]).join("").toUpperCase(); }
+
+function PlazoPill({ dl }) {
+  if (!dl) return <span style={{ fontSize: 12, color: "#C6CBD3" }}>—</span>;
+  const d = dLeft(dl);
+  const base = { display: "inline-flex", alignItems: "center", padding: "5px 10px", borderRadius: 999, fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" };
+  if (d < 0)  return <span style={{ ...base, background: "#FCEBE9", color: "#D83A2C" }}>Atrasado {Math.abs(d)}d</span>;
+  if (d === 0) return <span style={{ ...base, background: "#FCEBE9", color: "#D83A2C" }}>Hoy</span>;
+  if (d === 1) return <span style={{ ...base, background: "#FDF2E3", color: "#B5760B" }}>Mañana</span>;
+  if (d <= 3)  return <span style={{ ...base, background: "#FDF2E3", color: "#B5760B" }}>{d} días</span>;
+  return <span style={{ ...base, background: "#F0F2F5", color: "#5B6270" }}>{d} días</span>;
+}
+
+function CabeceraTabla({ colAccion = "Acciones", colFecha = "Ingreso", colPlazo = "Entrega" }) {
+  return (
+    <div className="t-cab">
+      <div>Nota de venta</div>
+      <div>Cliente</div>
+      <div>Vendedor</div>
+      <div>{colFecha}</div>
+      <div className="t-der">Prendas</div>
+      <div className="t-der">Monto</div>
+      <div>{colPlazo}</div>
+      <div className="t-cen">Impreso</div>
+      <div className="t-der">{colAccion}</div>
+    </div>
+  );
+}
+
+// Fila + panel desplegable. `acciones` son los botones del panel.
+function FilaPedido({ order, onDetail, acciones, mostrarPlazo = true, fechaEtiqueta }) {
+  const { userName, onToggleImpreso } = useContext(AppContext);
+  const [abierta, setAbierta] = useState(false);
+  const esCristian = (userName || "").trim().toLowerCase() === "cristian";
+  const dl = fechaEntregaEfectiva(order);
+  const exclusiva = order.exclusivaEstado === "aprobada";
+
+  const descargarNota = async e => {
+    e.stopPropagation();
+    const nota = (order.filesNota || [])[0];
+    if (!nota) { alert("Este pedido no tiene nota de venta adjunta."); return; }
+    const u = await urlArchivo(nota);
+    if (u) window.open(u, "_blank");
+  };
+
+  const sello = order.express ? { t: "Express", bg: "#FDF0E6", c: "#EC6A1E" }
+    : order.type === "sub" ? (order.stage === "diseno"
+        ? { t: "Diseño", bg: "#F3EDFD", c: "#6D3BD4" }
+        : { t: "Producción", bg: "#FFF6E0", c: "#B5760B" }) : null;
+
+  // Etiquetas de estado que antes vivían en la tarjeta
+  const chips = [];
+  if (sello) chips.push({ k: "sello", t: sello.t, bg: sello.bg, c: sello.c });
+  if (order.type === "sub" && order.stage === "diseno" && !order.listoAt) {
+    chips.push(order.maquetaEstado === "revision" ? { k: "mq", t: "Maqueta en revisión", bg: "#E4EDFD", c: "#1D4ED8" }
+      : order.maquetaEstado === "ajustes" ? { k: "mq", t: "Maqueta en ajustes", bg: "#FDECEA", c: "#C2410C" }
+      : { k: "mq", t: "Esperando maqueta", bg: "#EFF1F4", c: "#6B7280" });
+  }
+  if (exclusiva) chips.push({ k: "ex", t: `★ Exclusivo${order.exclusivaFecha ? " " + fmtDate(order.exclusivaFecha).replace(/ de \d{4}| \d{4}/, "") : ""}`, bg: "#EDE9FE", c: "#6D28D9" });
+  if (order.exclusivaEstado === "pendiente") chips.push({ k: "exp", t: "★ Exclusiva pendiente", bg: "#FEF6D9", c: "#92610A" });
+  if (order.revisionEstado === "corregido") chips.push({ k: "rv", t: "Corregido", bg: "#E6F5EC", c: "#13794F" });
+  if (order.listoAt && !order.deliveredAt) chips.push({ k: "ls", t: "✓ Listo", bg: "#E6F5EC", c: "#13794F" });
+
+  const nArchivos = (order.files || []).length + (order.filesMaqueta || []).length
+                  + (order.filesNota || []).length + (order.filesFoto || []).length;
+
+  return (
+    <>
+      <div className="t-fila" style={exclusiva ? { boxShadow: "inset 4px 0 0 #8B5CF6", background: abierta ? "#F7F9FC" : "#FAF9FF" } : undefined}
+           onClick={() => setAbierta(a => !a)}>
+        <div className="t-nv">
+          <b>{order.notaVenta || "—"}</b>
+          {(order.filesNota || []).length > 0 && (
+            <button className="t-btn" onClick={descargarNota} title="Descargar nota de venta" style={{ width: 23, height: 23, borderRadius: 7 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19h14"/></svg>
+            </button>
+          )}
+        </div>
+        <div className="t-cli">
+          <b>{order.cliente}</b>
+          <i>
+            <span>{order.deporte}</span>
+            {chips.map(ch => <span key={ch.k} className="t-chip" style={{ background: ch.bg, color: ch.c }}>{ch.t}</span>)}
+          </i>
+        </div>
+        <div className="t-vend">
+          <span className="t-ini" style={{ background: colorVendedor(order.vendedor) }}>{inicialesDe(order.vendedor)}</span>
+          <span className="t-nom">{order.vendedor}</span>
+        </div>
+        <div className="t-fec">
+          <b>{fmtDate(fechaEtiqueta ? order[fechaEtiqueta] : order.createdAt).replace(/ de \d{4}| \d{4}/, "")}</b>
+          <span>{order.horaEnvio || ""}</span>
+        </div>
+        <div className="t-pre t-der">{order.cantidad}</div>
+        <div className="t-mon t-der">{fmtCurrency(order.valor)}</div>
+        <div className="t-plazo">{mostrarPlazo ? <PlazoPill dl={dl} /> : <span style={{ fontSize: 12, color: "#C6CBD3" }}>—</span>}</div>
+        {esCristian ? (
+          <button className={`t-tick ${order.impreso ? "si" : ""}`} aria-pressed={!!order.impreso}
+            title={order.impreso ? "Impreso" : "Sin imprimir"}
+            onClick={e => { e.stopPropagation(); onToggleImpreso(order.id, !order.impreso); }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m5 13 4.5 4.5L19 7"/></svg>
+          </button>
+        ) : <div />}
+        <div className="t-acc">
+          {onDetail && <button className="t-ver" onClick={e => { e.stopPropagation(); onDetail(); }}>Detalle</button>}
+          <button className="t-btn t-tog" title={`Ver notas y ${nArchivos} archivo${nArchivos === 1 ? "" : "s"}`} aria-expanded={abierta}
+            style={{ position: "relative" }}
+            onClick={e => { e.stopPropagation(); setAbierta(a => !a); }}>
+            {nArchivos > 0 && !abierta && <span className="t-clip">{nArchivos}</span>}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
+                 style={{ transform: abierta ? "rotate(180deg)" : "none", transition: "transform .18s" }}><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+        </div>
+      </div>
+
+      {abierta && (
+        <div className="t-panel">
+          <div className="t-notas">
+            <h4>Notas del vendedor</h4>
+            <p className={order.notas ? "" : "sin"}>{order.notas || "Sin notas."}</p>
+            {order.maquetaEstado === "ajustes" && order.maquetaAjustes && (
+              <div className="t-ajustes">
+                <b>Ajustes pedidos por el cliente</b>
+                <span>{order.maquetaAjustes}</span>
+              </div>
+            )}
+          </div>
+          <div className="t-rej">
+            <div className="t-bloque">
+              <h4>Archivos del pedido</h4>
+              <ArchivosPanel order={order} />
+            </div>
+            <div className="t-bloque">
+              <h4>Datos del pedido</h4>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 16px" }}>
+                <div><span style={{ display: "block", fontSize: 11.5, color: "#949BA8", fontWeight: 600 }}>Prendas</span><b style={{ fontSize: 14 }}>{order.cantidad}</b></div>
+                {order.type === "four" && <div><span style={{ display: "block", fontSize: 11.5, color: "#949BA8", fontWeight: 600 }}>Estampados</span><b style={{ fontSize: 14 }}>{order.cantidadEstampados || 0}</b></div>}
+                <div><span style={{ display: "block", fontSize: 11.5, color: "#949BA8", fontWeight: 600 }}>Entrega</span><b style={{ fontSize: 14 }}>{dl ? fmtDate(dl) : "—"}</b></div>
+                <div><span style={{ display: "block", fontSize: 11.5, color: "#949BA8", fontWeight: 600 }}>Monto</span><b style={{ fontSize: 14 }}>{fmtCurrency(order.valor)}</b></div>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 9, flexWrap: "wrap", alignItems: "center" }}>
+            {acciones}
+            <div style={{ marginLeft: "auto" }}><ActivityButton order={order} /></div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// Lista de archivos dentro del panel
+function ArchivosPanel({ order }) {
+  const grupos = [
+    { t: "Logos y números", ic: "🎨", arr: order.files || [] },
+    { t: "Maqueta",         ic: "🖼", arr: order.filesMaqueta || [] },
+    { t: "Nota de venta",   ic: "📄", arr: order.filesNota || [] },
+    { t: "Foto del producto", ic: "📸", arr: order.filesFoto || [] },
+  ];
+  const total = grupos.reduce((s, g) => s + g.arr.length, 0);
+  if (!total) return <div style={{ fontSize: 13, color: "#C6CBD3" }}>Sin archivos adjuntos</div>;
+
+  const abrir = async (f) => { const u = await urlArchivo(f); if (u) window.open(u, "_blank"); };
+  const bajar = async (f) => {
+    const u = await urlArchivo(f); if (!u) return;
+    try {
+      const r = await fetch(u); const b = await r.blob(); const o = URL.createObjectURL(b);
+      const a = document.createElement("a"); a.href = o; a.download = f.name || "archivo";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(o), 1000);
+    } catch { window.open(u, "_blank"); }
+  };
+
+  return (
+    <>
+      {grupos.flatMap(g => g.arr.map((f, i) => (
+        <div key={g.t + i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "1px solid #F2F4F6", flexWrap: "wrap" }}>
+          <div style={{ width: 31, height: 31, borderRadius: 8, background: "#F3F5F8", display: "grid", placeItems: "center", flex: "none", fontSize: 14 }}>{g.ic}</div>
+          <div style={{ flex: "1 1 140px", minWidth: 0 }}>
+            <b style={{ display: "block", fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</b>
+            <span style={{ fontSize: 11.5, color: "#949BA8" }}>{g.t}</span>
+          </div>
+          <div style={{ display: "flex", gap: 5 }}>
+            <button className="t-ver" style={{ padding: "5px 9px", fontSize: 11.5 }} onClick={() => abrir(f)}>Ver</button>
+            <button className="t-ver" style={{ padding: "5px 9px", fontSize: 11.5 }} onClick={() => bajar(f)}>Descargar</button>
+          </div>
+        </div>
+      )))}
+    </>
+  );
+}
+
+// Botones del panel, con el estilo de la propuesta
+function BotonPanel({ tono = "neutro", onClick, children }) {
+  const estilos = {
+    listo:  { background: "#13794F", color: "#fff", border: "none" },
+    rev:    { background: "#fff", color: "#B5760B", border: "1px solid #F2D3A8" },
+    azul:   { background: "#2B5CE6", color: "#fff", border: "none" },
+    morado: { background: "#6D3BD4", color: "#fff", border: "none" },
+    rojo:   { background: "#fff", color: "#D83A2C", border: "1px solid #FCA5A5" },
+    neutro: { background: "#fff", color: "#141619", border: "1px solid #E4E7EC" },
+  }[tono];
+  return (
+    <button onClick={onClick} style={{ ...estilos, borderRadius: 10, padding: "11px 18px",
+      fontFamily: "Montserrat, sans-serif", fontSize: 13.5, fontWeight: 700, cursor: "pointer" }}>{children}</button>
+  );
+}
+
+// Agrupa por día de entrega y pinta las bandas
+function agruparPorEntrega(orders) {
+  const DIAS = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+  const MES  = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  const grupos = [];
+  for (const o of orders) {
+    const dl = fechaEntregaEfectiva(o);
+    let titulo = "Sin fecha de entrega", urg = false;
+    if (dl) {
+      const d = dLeft(dl), f = new Date(dl);
+      if (d < 0)       { titulo = "Atrasados"; urg = true; }
+      else if (d === 0){ titulo = "Entrega hoy"; urg = true; }
+      else if (d === 1){ titulo = "Entrega mañana"; urg = true; }
+      else titulo = `Entrega ${DIAS[f.getDay()]} ${f.getDate()} ${MES[f.getMonth()]}`;
+    }
+    const g = grupos.find(x => x.titulo === titulo);
+    if (g) g.items.push(o); else grupos.push({ titulo, urg, items: [o] });
+  }
+  return grupos;
 }
 
 function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDetail, onDelete, isAdmin, position }) {
@@ -3691,226 +3995,225 @@ function Dashboard({ data, allPending }) {
 }
 
 // ─── ATRASADOS VIEW ───────────────────────────────────────────────────────────
+// ─── BARRA DE FILTROS ─────────────────────────────────────────────────────────
+function BarraFiltros({ busca, setBusca, vendedor, setVendedor, vendedores, sinImprimir, setSinImprimir, resultados, total }) {
+  const { userName } = useContext(AppContext);
+  const esCristian = (userName || "").trim().toLowerCase() === "cristian";
+  return (
+    <div style={{ display: "flex", gap: 9, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
+      <div style={{ position: "relative", flex: "1 1 280px", minWidth: 0, display: "flex", alignItems: "center" }}>
+        <span style={{ position: "absolute", left: 14, fontSize: 15, opacity: .45, pointerEvents: "none" }}>🔍</span>
+        <input value={busca} onChange={e => setBusca(e.target.value)}
+          placeholder="Buscar por cliente, vendedor o nota de venta"
+          style={{ width: "100%", boxSizing: "border-box", padding: "12px 14px 12px 40px", borderRadius: 11,
+                   border: "1px solid #E4E7EC", background: "#fff", fontSize: 14, outline: "none",
+                   fontFamily: "Montserrat, sans-serif", color: "#141619" }} />
+        {busca && <button onClick={() => setBusca("")} style={{ position: "absolute", right: 10, background: "#F3F4F6", border: "none", borderRadius: "50%", width: 22, height: 22, cursor: "pointer", color: "#6B7280", fontSize: 12 }}>✕</button>}
+      </div>
+      {vendedores.length > 1 && (
+        <select value={vendedor} onChange={e => setVendedor(e.target.value)}
+          style={{ padding: "12px 13px", borderRadius: 11, border: "1px solid #E4E7EC", background: "#fff",
+                   fontFamily: "Montserrat, sans-serif", fontSize: 13.5, fontWeight: 600, color: "#141619", cursor: "pointer" }}>
+          <option value="">Todos los vendedores</option>
+          {vendedores.map(v => <option key={v} value={v}>{v}</option>)}
+        </select>
+      )}
+      {esCristian && (
+        <label style={{ display: "flex", alignItems: "center", gap: 9, background: "#fff", border: "1px solid #E4E7EC",
+                        padding: "11px 14px", borderRadius: 11, fontSize: 13.5, fontWeight: 600, color: "#5B6270", cursor: "pointer", userSelect: "none" }}>
+          <input type="checkbox" checked={sinImprimir} onChange={e => setSinImprimir(e.target.checked)} style={{ width: 16, height: 16, accentColor: "#13794F", cursor: "pointer" }} />
+          Solo sin imprimir
+        </label>
+      )}
+      <span style={{ fontSize: 13, color: "#5B6270", fontWeight: 700 }}>
+        {resultados === total ? `${total} pedido${total !== 1 ? "s" : ""}` : `${resultados} de ${total}`}
+      </span>
+    </div>
+  );
+}
+
+function aplicarFiltros(orders, { busca, vendedor, sinImprimir }) {
+  const q = (busca || "").trim().toLowerCase();
+  return orders.filter(o => {
+    if (vendedor && o.vendedor !== vendedor) return false;
+    if (sinImprimir && o.impreso) return false;
+    if (!q) return true;
+    return (o.cliente || "").toLowerCase().includes(q)
+        || (o.vendedor || "").toLowerCase().includes(q)
+        || (o.notaVenta || "").toLowerCase().includes(q);
+  });
+}
+
+function useFiltros(orders) {
+  const [busca, setBusca] = useState("");
+  const [vendedor, setVendedor] = useState("");
+  const [sinImprimir, setSinImprimir] = useState(false);
+  const vendedores = [...new Set(orders.map(o => o.vendedor).filter(Boolean))].sort();
+  const visibles = aplicarFiltros(orders, { busca, vendedor, sinImprimir });
+  return { visibles,
+           props: { busca, setBusca, vendedor, setVendedor, sinImprimir, setSinImprimir, vendedores,
+                    resultados: visibles.length, total: orders.length } };
+}
+
+function TablaPedidos({ orders, agrupar = true, onDetail, acciones, vacio = "No hay pedidos", fechaEtiqueta, mostrarPlazo = true, colFecha, colPlazo }) {
+  const cab = <CabeceraTabla colFecha={colFecha} colPlazo={mostrarPlazo ? colPlazo : (colPlazo || "Estado")} />;
+  if (!orders.length) return <div className="t-hoja">{cab}<div className="t-vacio">{vacio}</div></div>;
+  const grupos = agrupar ? agruparPorEntrega(orders) : [{ titulo: null, items: orders }];
+  return (
+    <div className="t-hoja">
+      {cab}
+      {grupos.map((g, i) => (
+        <div key={g.titulo || i}>
+          {g.titulo && (
+            <div className={`t-banda ${g.urg ? "urg" : ""}`}>
+              <h3>{g.titulo}</h3>
+              <span>{g.items.length} pedido{g.items.length > 1 ? "s" : ""} · {fmtCurrency(g.items.reduce((s, o) => s + (o.valor || 0), 0))}</span>
+            </div>
+          )}
+          {g.items.map(o => (
+            <FilaPedido key={o.id} order={o} onDetail={onDetail ? () => onDetail(o) : null}
+              fechaEtiqueta={fechaEtiqueta} mostrarPlazo={mostrarPlazo}
+              acciones={acciones ? acciones(o) : null} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── ATRASADOS VIEW ───────────────────────────────────────────────────────────
 function AtrasadosView({ orders, isAdmin, onDeliver, onApprove, onRevision, onDetail, onDelete }) {
-  const [open, setOpen] = useState(true);
-  const getDeadline = o => o.type === "four" ? o.deadline : (o.stage === "produccion" ? o.deadlineProduccion : o.deadlineDiseno);
-  const atrasados = orders
-    .filter(o => { const dl = getDeadline(o); return dl && dLeft(dl) < 0; })
-    .sort((a, b) => new Date(getDeadline(a)) - new Date(getDeadline(b)));
+  const f = useFiltros(orders);
+  const atrasados = f.visibles
+    .filter(o => { const dl = fechaEntregaEfectiva(o); return dl && dLeft(dl) < 0; })
+    .sort((a, b) => new Date(fechaEntregaEfectiva(a)) - new Date(fechaEntregaEfectiva(b)));
+
+  const acciones = o => (
+    <>
+      {isAdmin && <BotonPanel tono="listo" onClick={() => onDeliver(o.id, o.type)}>Marcar listo</BotonPanel>}
+      {o.type === "sub" && o.stage === "diseno" && onApprove && <BotonPanel tono="morado" onClick={() => onApprove(o.id)}>Aprobar diseño</BotonPanel>}
+      {isAdmin && onRevision && <BotonPanel tono="rev" onClick={() => onRevision(o.id, o.type)}>Enviar a revisión</BotonPanel>}
+      {isAdmin && onDelete && <BotonPanel tono="rojo" onClick={() => onDelete(o.id)}>Eliminar</BotonPanel>}
+    </>
+  );
 
   return (
     <div>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ ...S.pageTitle, margin: 0 }}>Pedidos Atrasados</h2>
-        <p style={{ fontSize: 13, color: "#9CA3AF", margin: "4px 0 0", fontFamily: "Montserrat, sans-serif" }}>
-          Pedidos vencidos ordenados de más a menos atrasado. El #1 es el más urgente.
-        </p>
-      </div>
-
-      <div style={{ marginBottom: 20 }}>
-        <button onClick={() => setOpen(o => !o)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "#7F1D1D", borderRadius: 10, padding: "16px 22px", border: "none", cursor: "pointer", marginBottom: 10 }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ fontFamily: "NikeFutura, Montserrat, sans-serif", fontSize: 16, fontWeight: 900, color: "#FCA5A5", letterSpacing: "0.1em", textTransform: "uppercase" }}>🔥 Pedidos Atrasados</span>
-            <span style={{ background: "#DC2626", color: "#fff", fontSize: 13, fontWeight: 800, padding: "3px 12px", borderRadius: 10 }}>{atrasados.length}</span>
-          </span>
-          <span style={{ color: "#FCA5A5", fontSize: 16, transition: "transform .2s", display: "inline-block", transform: open ? "rotate(180deg)" : "rotate(0)" }}>▾</span>
-        </button>
-        {open && (atrasados.length === 0
-          ? <div style={S.emptyCard}>✓ Sin pedidos atrasados</div>
-          : atrasados.map((o, i) => <OrderCard key={o.id} order={o} accentColor="#DC2626" isAdmin={isAdmin} position={i + 1}
-              onDetail={() => onDetail(o)}
-              onDeliver={() => onDeliver(o.id, o.type)}
-              onApprove={o.type === "sub" && o.stage === "diseno" ? () => onApprove(o.id) : null}
-              onRevision={isAdmin ? () => onRevision(o.id, o.type) : null}
-              onDelete={isAdmin ? () => onDelete(o.id) : null} />))}
-      </div>
+      <EncabezadoVista titulo="Pedidos atrasados" bajada="Pasaron su fecha máxima de entrega. El más atrasado arriba." orders={atrasados} extra="atrasado" />
+      <BarraFiltros {...f.props} />
+      <TablaPedidos orders={atrasados} agrupar={false} onDetail={onDetail} acciones={acciones} vacio="✓ Sin pedidos atrasados" />
     </div>
   );
 }
 
 // ─── TODOS VIEW ───────────────────────────────────────────────────────────────
-function TodosView({ orders, isAdmin, onDeliver, onApprove, onRevision, onDetail }) {
-  const [fv, setFv] = useState("Todos");
-  const sortByOrder = compareOrders;
-  const fourOrders = orders.filter(o => o.type === "four" && (fv === "Todos" || o.vendedor === fv)).sort(sortByOrder);
-  const subOrders  = orders.filter(o => o.type === "sub"  && (fv === "Todos" || o.vendedor === fv)).sort(sortByOrder);
-  // Pedidos atrasados (vencidos): el más atrasado arriba
-  const getDeadline = o => o.type === "four" ? o.deadline : (o.stage === "produccion" ? o.deadlineProduccion : o.deadlineDiseno);
-  const atrasados = [...fourOrders, ...subOrders]
-    .filter(o => { const dl = getDeadline(o); return dl && dLeft(dl) < 0; })
-    .sort((a, b) => new Date(getDeadline(a)) - new Date(getDeadline(b)));
+function TodosView({ orders, isAdmin, onDeliver, onApprove, onRevision, onDetail, onDelete }) {
+  const f = useFiltros(orders);
+  const four = f.visibles.filter(o => o.type === "four").sort(compareOrders);
+  const sub  = f.visibles.filter(o => o.type === "sub").sort(compareOrders);
+
+  const accionesDe = o => (
+    <>
+      {isAdmin && onDeliver && <BotonPanel tono="listo" onClick={() => onDeliver(o.id, o.type)}>Marcar listo</BotonPanel>}
+      {o.type === "sub" && o.stage === "diseno" && onApprove && <BotonPanel tono="morado" onClick={() => onApprove(o.id)}>Aprobar diseño</BotonPanel>}
+      {isAdmin && onRevision && <BotonPanel tono="rev" onClick={() => onRevision(o.id, o.type)}>Enviar a revisión</BotonPanel>}
+      {isAdmin && onDelete && <BotonPanel tono="rojo" onClick={() => onDelete(o.id)}>Eliminar</BotonPanel>}
+    </>
+  );
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
-        <h2 style={{ ...S.pageTitle, margin: 0 }}>Todos los Pedidos</h2>
-        <select style={S.select} value={fv} onChange={e => setFv(e.target.value)}>
-          <option>Todos</option>{SELLERS.map(s => <option key={s}>{s}</option>)}
-        </select>
-      </div>
-      <Section title="Pedidos Four" count={fourOrders.length} accent="#3B82F6">
-        {fourOrders.length === 0 ? <div style={S.emptyCard}>Sin Pedidos Four activos</div>
-          : fourOrders.map((o, i) => <OrderCard key={o.id} order={o} accentColor="#3B82F6" isAdmin={isAdmin} position={i + 1}
-              onDetail={() => onDetail(o)}
-              onDeliver={() => onDeliver(o.id, "four")}
-              onRevision={isAdmin ? () => onRevision(o.id, "four") : null}
-              onDelete={isAdmin ? () => onDelete(o.id) : null} />)}
-      </Section>
-      <Section title="Pedidos Sublimados" count={subOrders.length} accent="#7C3AED">
-        {subOrders.length === 0 ? <div style={S.emptyCard}>Sin Pedidos Sublimados activos</div>
-          : subOrders.map((o, i) => <OrderCard key={o.id} order={o} accentColor="#7C3AED" isAdmin={isAdmin} position={i + 1}
-              onDetail={() => onDetail(o)}
-              onDeliver={() => onDeliver(o.id, "sub")}
-              onApprove={o.stage === "diseno" ? () => onApprove(o.id) : null}
-              onRevision={isAdmin ? () => onRevision(o.id, "sub") : null}
-              onDelete={isAdmin ? () => onDelete(o.id) : null} />)}
-      </Section>
+      <EncabezadoVista titulo="Todos los pedidos" bajada="Ordenados por día de entrega. Los más próximos arriba." orders={f.visibles} />
+      <BarraFiltros {...f.props} />
+      <SeccionTabla titulo="Pedidos Four" cantidad={four.length} color="#2B5CE6">
+        <TablaPedidos orders={four} onDetail={onDetail} acciones={accionesDe} vacio="Sin pedidos Four activos" />
+      </SeccionTabla>
+      <SeccionTabla titulo="Sublimados" cantidad={sub.length} color="#6D3BD4">
+        <TablaPedidos orders={sub} onDetail={onDetail} acciones={accionesDe} vacio="Sin sublimados activos" />
+      </SeccionTabla>
+    </div>
+  );
+}
 
-      {/* Pedidos Atrasados (vencidos) */}
-      <div style={{ marginTop: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#7F1D1D", borderRadius: 10, padding: "16px 22px", marginBottom: 10 }}>
-          <span style={{ fontFamily: "NikeFutura, Montserrat, sans-serif", fontSize: 16, fontWeight: 900, color: "#FCA5A5", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            🔥 Pedidos Atrasados
-          </span>
-          <span style={{ background: "#DC2626", color: "#fff", fontSize: 13, fontWeight: 800, padding: "3px 12px", borderRadius: 10 }}>{atrasados.length}</span>
-        </div>
-        {atrasados.length === 0
-          ? <div style={S.emptyCard}>✓ Sin pedidos atrasados</div>
-          : atrasados.map((o, i) => <OrderCard key={o.id} order={o} accentColor="#DC2626" isAdmin={isAdmin} position={i + 1}
-              onDetail={() => onDetail(o)}
-              onDeliver={() => onDeliver(o.id, o.type)}
-              onApprove={o.type === "sub" && o.stage === "diseno" ? () => onApprove(o.id) : null}
-              onRevision={isAdmin ? () => onRevision(o.id, o.type) : null}
-              onDelete={isAdmin ? () => onDelete(o.id) : null} />)}
+// Encabezado con el resumen de la derecha
+function EncabezadoVista({ titulo, bajada, orders, extra }) {
+  const prendas = orders.reduce((s, o) => s + (Number(o.cantidad) || 0), 0);
+  const monto   = orders.reduce((s, o) => s + (Number(o.valor) || 0), 0);
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: 18 }}>
+      <div>
+        <h2 style={{ ...S.pageTitle, margin: 0 }}>{titulo}</h2>
+        {bajada && <p style={{ fontSize: 13, color: "#5B6270", margin: "5px 0 0", fontFamily: "Montserrat, sans-serif" }}>{bajada}</p>}
       </div>
+      <div style={{ display: "flex", gap: 24 }}>
+        <div><span style={{ display: "block", fontSize: 21, fontWeight: 800, letterSpacing: "-.02em" }}>{orders.length}</span><span style={{ fontSize: 11, color: "#949BA8", fontWeight: 600 }}>pedidos</span></div>
+        <div><span style={{ display: "block", fontSize: 21, fontWeight: 800, letterSpacing: "-.02em" }}>{prendas}</span><span style={{ fontSize: 11, color: "#949BA8", fontWeight: 600 }}>prendas</span></div>
+        <div><span style={{ display: "block", fontSize: 21, fontWeight: 800, letterSpacing: "-.02em" }}>{fmtCurrency(monto)}</span><span style={{ fontSize: 11, color: "#949BA8", fontWeight: 600 }}>{extra || "comprometido"}</span></div>
+      </div>
+    </div>
+  );
+}
+
+function SeccionTabla({ titulo, cantidad, color, children }) {
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
+        <span style={{ width: 9, height: 9, borderRadius: 3, background: color }} />
+        <h3 style={{ fontSize: 15, fontWeight: 800, margin: 0, letterSpacing: "-.01em", fontFamily: "NikeFutura, Montserrat, sans-serif" }}>{titulo}</h3>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: "#949BA8" }}>{cantidad}</span>
+      </div>
+      {children}
     </div>
   );
 }
 
 // ─── FOUR VIEW ────────────────────────────────────────────────────────────────
 function FourView({ orders, isAdmin, onDeliver, onRevision, onDetail, onDelete, onReorder }) {
-  const [fv, setFv] = useState("Todos");
-  const [dragIdx, setDragIdx] = useState(null);
-  const [dragOverIdx, setDragOverIdx] = useState(null);
-  const filtered = (fv === "Todos" ? [...orders] : orders.filter(o => o.vendedor === fv)).sort(compareOrders);
-
-  const handleDragStart = (i) => setDragIdx(i);
-  const handleDragOver = (e, i) => { e.preventDefault(); setDragOverIdx(i); };
-  const handleDrop = (i) => {
-    if (dragIdx === null || dragIdx === i || !onReorder) return;
-    const newList = [...filtered];
-    const [moved] = newList.splice(dragIdx, 1);
-    newList.splice(i, 0, moved);
-    // Merge back non-filtered items
-    if (fv === "Todos") { onReorder(newList); }
-    else {
-      const rest = orders.filter(o => o.vendedor !== fv);
-      onReorder([...newList, ...rest]);
-    }
-    setDragIdx(null); setDragOverIdx(null);
-  };
-
+  const f = useFiltros(orders);
+  const lista = [...f.visibles].sort(compareOrders);
+  const acciones = o => (
+    <>
+      {isAdmin && <BotonPanel tono="listo" onClick={() => onDeliver(o.id)}>Marcar listo</BotonPanel>}
+      {isAdmin && onRevision && <BotonPanel tono="rev" onClick={() => onRevision(o.id)}>Enviar a revisión</BotonPanel>}
+      {isAdmin && onDelete && <BotonPanel tono="rojo" onClick={() => onDelete(o.id)}>Eliminar</BotonPanel>}
+    </>
+  );
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
-        <div>
-          <h2 style={{ ...S.pageTitle, margin: 0 }}>Pedidos Four</h2>
-          {onReorder && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>✦ Arrastra las tarjetas para cambiar el orden</div>}
-        </div>
-        <select style={S.select} value={fv} onChange={e => setFv(e.target.value)}>
-          <option>Todos</option>{SELLERS.map(s => <option key={s}>{s}</option>)}
-        </select>
-      </div>
-      {filtered.length === 0 ? <div style={S.emptyCard}>Sin Pedidos Four activos</div>
-        : filtered.map((o, i) => (
-          <div key={o.id}
-            draggable={!!onReorder}
-            onDragStart={() => handleDragStart(i)}
-            onDragOver={e => handleDragOver(e, i)}
-            onDrop={() => handleDrop(i)}
-            onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
-            style={{ opacity: dragIdx === i ? 0.4 : 1, borderTop: dragOverIdx === i && dragIdx !== i ? "3px solid #39FF14" : "3px solid transparent", transition: "opacity 0.15s", cursor: onReorder ? "grab" : "default" }}>
-            <OrderCard order={o} accentColor="#3B82F6" isAdmin={isAdmin} position={i + 1}
-              onDetail={() => onDetail(o)}
-              onDeliver={() => onDeliver(o.id)}
-              onRevision={isAdmin ? () => onRevision(o.id) : null}
-              onDelete={isAdmin ? () => onDelete(o.id) : null} />
-          </div>
-        ))}
+      <EncabezadoVista titulo="Pedidos Four" bajada="Ordenados por día de entrega. Express y excepciones suben dentro del día." orders={lista} />
+      <BarraFiltros {...f.props} />
+      <TablaPedidos orders={lista} onDetail={onDetail} acciones={acciones} vacio="No hay pedidos Four activos" />
     </div>
   );
 }
 
 // ─── SUB VIEW ─────────────────────────────────────────────────────────────────
 function SubView({ orders, isAdmin, onApprove, onDeliver, onRevision, onDetail, onDelete, onReorder }) {
-  const [fv, setFv] = useState("Todos");
-  const [dragIdx, setDragIdx] = useState(null);
-  const [dragOverIdx, setDragOverIdx] = useState(null);
-  const [dragSection, setDragSection] = useState(null);
-  const filtered = fv === "Todos" ? [...orders] : orders.filter(o => o.vendedor === fv);
-  const enD = filtered.filter(o => o.stage === "diseno").sort(compareOrders);
-  // En Producción se ordena por fecha de aprobación del diseño: el que aprobó primero va primero
-  const enP = filtered.filter(o => o.stage === "produccion").sort(compareOrders);
-
-  const handleDragStart = (i, section) => { setDragIdx(i); setDragSection(section); };
-  const handleDragOver = (e, i, section) => { e.preventDefault(); if (section === dragSection) setDragOverIdx(i); };
-  const handleDrop = (i, section) => {
-    if (dragIdx === null || dragIdx === i || section !== dragSection || !onReorder) return;
-    const sectionList = section === "diseno" ? [...enD] : [...enP];
-    const [moved] = sectionList.splice(dragIdx, 1);
-    sectionList.splice(i, 0, moved);
-    const otherSection = section === "diseno" ? enP : enD;
-    const newFiltered = section === "diseno" ? [...sectionList, ...otherSection] : [...otherSection, ...sectionList];
-    if (fv === "Todos") { onReorder(newFiltered); }
-    else {
-      const rest = orders.filter(o => o.vendedor !== fv);
-      onReorder([...newFiltered, ...rest]);
-    }
-    setDragIdx(null); setDragOverIdx(null); setDragSection(null);
-  };
-
-  const DraggableCard = ({ o, i, section, accentColor, extraProps }) => (
-    <div
-      draggable={!!onReorder}
-      onDragStart={() => handleDragStart(i, section)}
-      onDragOver={e => handleDragOver(e, i, section)}
-      onDrop={() => handleDrop(i, section)}
-      onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); setDragSection(null); }}
-      style={{ opacity: dragIdx === i && dragSection === section ? 0.4 : 1, borderTop: dragOverIdx === i && dragSection === section && dragIdx !== i ? "3px solid #39FF14" : "3px solid transparent", transition: "opacity 0.15s", cursor: onReorder ? "grab" : "default" }}>
-      <OrderCard order={o} accentColor={accentColor} isAdmin={isAdmin} position={i + 1}
-        onDetail={() => onDetail(o)}
-        onRevision={isAdmin ? () => onRevision(o.id) : null}
-        onDelete={isAdmin ? () => onDelete(o.id) : null}
-        {...extraProps} />
-    </div>
+  const f = useFiltros(orders);
+  const enD = f.visibles.filter(o => o.stage === "diseno").sort(compareOrders);
+  const enP = f.visibles.filter(o => o.stage === "produccion").sort(compareOrders);
+  const acciones = o => (
+    <>
+      {o.stage === "diseno" && onApprove && <BotonPanel tono="morado" onClick={() => onApprove(o.id)}>Aprobar diseño</BotonPanel>}
+      {isAdmin && o.stage === "produccion" && <BotonPanel tono="listo" onClick={() => onDeliver(o.id)}>Marcar listo</BotonPanel>}
+      {isAdmin && onRevision && <BotonPanel tono="rev" onClick={() => onRevision(o.id)}>Enviar a revisión</BotonPanel>}
+      {isAdmin && onDelete && <BotonPanel tono="rojo" onClick={() => onDelete(o.id)}>Eliminar</BotonPanel>}
+    </>
   );
-
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
-        <div>
-          <h2 style={{ ...S.pageTitle, margin: 0 }}>Pedidos Sublimados</h2>
-          {onReorder && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>✦ Arrastra las tarjetas para cambiar el orden</div>}
-        </div>
-        <select style={S.select} value={fv} onChange={e => setFv(e.target.value)}>
-          <option>Todos</option>{SELLERS.map(s => <option key={s}>{s}</option>)}
-        </select>
-      </div>
-      <Section title="En Diseño" count={enD.length} accent="#8B5CF6">
-        {enD.length === 0 ? <div style={S.emptyCard}>Sin pedidos en diseño</div>
-          : enD.map((o, i) => <DraggableCard key={o.id} o={o} i={i} section="diseno" accentColor="#8B5CF6"
-              extraProps={{ onApprove: () => onApprove(o.id), onDeliver: () => onDeliver(o.id) }} />)}
-      </Section>
-      <Section title="En Producción" count={enP.length} accent="#6D28D9">
-        {enP.length === 0 ? <div style={S.emptyCard}>Sin pedidos en producción</div>
-          : enP.map((o, i) => <DraggableCard key={o.id} o={o} i={i} section="produccion" accentColor="#6D28D9"
-              extraProps={{ onDeliver: () => onDeliver(o.id) }} />)}
-      </Section>
+      <EncabezadoVista titulo="Sublimados" bajada="En diseño esperan la maqueta del cliente. En producción corren 20 días hábiles." orders={f.visibles} />
+      <BarraFiltros {...f.props} />
+      <SeccionTabla titulo="En diseño" cantidad={enD.length} color="#DC2626">
+        <TablaPedidos orders={enD} onDetail={onDetail} acciones={acciones} vacio="Sin sublimados en diseño" />
+      </SeccionTabla>
+      <SeccionTabla titulo="En producción" cantidad={enP.length} color="#B5760B">
+        <TablaPedidos orders={enP} onDetail={onDetail} acciones={acciones} vacio="Sin sublimados en producción" />
+      </SeccionTabla>
     </div>
   );
 }
 
-// ─── REVISION VIEW ────────────────────────────────────────────────────────────
 function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetail, canEditOrders }) {
   const isMobile = useIsMobile();
   return (
@@ -3966,199 +4269,65 @@ function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetai
 
 // ─── LISTO: PENDIENTE DE ENTREGA ─────────────────────────────────────────────
 function ListoPendienteView({ orders, onEntregado, onDetail, isAdmin, currentUserName }) {
-  const isMobile = useIsMobile();
-  const [busqueda, setBusqueda] = useState("");
-  const visibles = filtrarListo(orders, isAdmin, currentUserName, busqueda);
-  // Group by day (listoAt date)
-  const grouped = {};
-  [...visibles].sort((a, b) => new Date(b.listoAt) - new Date(a.listoAt)).forEach(o => {
-    const key = o.listoAt ? new Date(o.listoAt).toLocaleDateString("es-CL", { day: "2-digit", month: "long", year: "numeric", timeZone: CHILE_TZ }) : "Sin fecha";
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(o);
-  });
-  const groupKeys = Object.keys(grouped);
+  // Cada vendedor ve solo los suyos; admins ven todo
+  const propios = isAdmin ? orders : orders.filter(o => notifKey(o.vendedor) === notifKey(currentUserName));
+  const f = useFiltros(propios);
+  const lista = [...f.visibles].sort((a, b) => new Date(b.listoAt) - new Date(a.listoAt));
 
-  const renderCard = (o) => (
-          <div key={o.id} style={{ ...S.orderCard, ...(isMobile ? { flexDirection: "column", alignItems: "stretch", gap: 10, padding: "14px" } : {}), borderLeft: `${isMobile ? 4 : 3}px solid #059669`, background: "#F0FDF4" }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-                <span style={{ fontWeight: 800, fontSize: 15, color: "#111827", textTransform: "uppercase" }}>{o.cliente}</span>
-                <span style={{ ...S.chip, background: "#DCFCE7", color: "#15803D" }}>✓ LISTO</span>
-                <span style={{ ...S.chip, background: o.type === "four" ? "#EFF6FF" : (o.stage === "diseno" ? "#FEE2E2" : "#FEF3C7"), color: o.type === "four" ? "#3B82F6" : (o.stage === "diseno" ? "#DC2626" : "#D97706") }}>
-                  {o.type === "four" ? (o.express ? "⚡ EXPRESS" : "FOUR") : (o.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN")}
-                </span>
-                {o.notaVenta && <span style={{ ...S.chip, background: "#111827", color: "#fff", fontWeight: 800 }}>NV #{o.notaVenta}</span>}
-                {o.files?.length > 0 && <span style={{ ...S.chip, background: "#EFF6FF", color: "#3B82F6" }}>📎 {o.files.length}</span>}
-              </div>
-              <div style={{ display: "flex", gap: 12, fontSize: 14, color: "#4B5563", flexWrap: "wrap", marginBottom: 4 }}>
-                <span style={{ fontWeight: 800, color: "#374151" }}>{o.vendedor}</span><span>·</span>
-                <span>{o.deporte}</span><span>·</span>
-                <span>{o.cantidad} prendas</span><span>·</span>
-                <span style={{ fontWeight: 700, color: "#374151" }}>{fmtCurrency(o.valor)}</span>
-              </div>
-              <div style={{ fontSize: 11, color: "#059669", fontWeight: 600, marginTop: 4 }}>
-                Listo desde: {fmtDate(o.listoAt)}
-              </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: isMobile ? "row" : "column", gap: isMobile ? 8 : 6, flexShrink: 0, marginLeft: isMobile ? 0 : 12, alignItems: isMobile ? "center" : "flex-end", justifyContent: isMobile ? "space-between" : undefined, flexWrap: isMobile ? "wrap" : undefined, paddingTop: isMobile ? 10 : 0, borderTop: isMobile ? "1px solid rgba(0,0,0,0.06)" : "none" }}>
-              <div style={{ textAlign: isMobile ? "left" : "right", marginBottom: isMobile ? 0 : 4 }}>
-                <div style={{ fontSize: 16, fontWeight: 900, color: "#059669" }}>{fmtCurrency(o.valor)}</div>
-                <div style={{ fontSize: 10, color: "#9CA3AF", letterSpacing: "0.06em" }}>VALOR PEDIDO</div>
-              </div>
-              <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
-              <button style={{ ...S.actionBtn, background: "#059669", color: "#fff", padding: "9px 16px", fontSize: 11 }} onClick={() => onEntregado(o.id)}>📦 Marcar entregado</button>
-            </div>
-          </div>
+  const acciones = o => (
+    <>
+      <BotonPanel tono="listo" onClick={() => onEntregado(o.id)}>Marcar entregado</BotonPanel>
+    </>
   );
 
   return (
     <div>
-      <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-        <div>
-          <h2 style={{ ...S.pageTitle, margin: 0 }}>Pendiente de Entrega</h2>
-          <p style={{ fontSize: 12, color: "#9CA3AF", margin: "4px 0 0", fontFamily: "Montserrat, sans-serif" }}>
-            Pedidos listos para entregar al cliente, agrupados por día. Marca como entregado cuando el vendedor lo despache.
-          </p>
-        </div>
-        <FiltroListo isAdmin={isAdmin} currentUserName={currentUserName} busqueda={busqueda} setBusqueda={setBusqueda} total={orders.length} mostrados={visibles.length} />
-      </div>
-      {visibles.length === 0
-        ? <div style={S.emptyCard}>{busqueda ? "Sin resultados para esa búsqueda" : (isAdmin ? "No hay pedidos pendientes de entrega" : "No tienes pedidos pendientes de entrega")}</div>
-        : groupKeys.map(day => (
-          <div key={day} style={{ marginBottom: 24 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-              <span style={{ fontFamily: "NikeFutura, Montserrat, sans-serif", fontSize: 14, fontWeight: 900, color: "#059669", letterSpacing: "0.08em", textTransform: "uppercase" }}>📅 {day}</span>
-              <span style={{ background: "#DCFCE7", color: "#15803D", fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 10 }}>{grouped[day].length} pedido{grouped[day].length > 1 ? "s" : ""}</span>
-              <div style={{ flex: 1, height: 1, background: "#E5E7EB" }} />
-            </div>
-            {grouped[day].map(o => renderCard(o))}
-          </div>
-        ))
-      }
+      <EncabezadoVista titulo="Pendiente de entrega" orders={lista} extra="por entregar"
+        bajada={isAdmin ? "Pedidos listos esperando que el cliente los retire." : "Tus pedidos listos para entregar."} />
+      <BarraFiltros {...f.props} />
+      <TablaPedidos orders={lista} agrupar={false} onDetail={onDetail} acciones={acciones}
+        fechaEtiqueta="listoAt" mostrarPlazo={false} colFecha="Listo desde" colPlazo=""
+        vacio={f.props.busca ? "Sin resultados para esa búsqueda" : (isAdmin ? "No hay pedidos pendientes de entrega" : "No tienes pedidos pendientes de entrega")} />
     </div>
-  );
-}
-
-// ─── BARRA DE FILTRO PARA PEDIDO LISTO / ENTREGADO ───────────────────────────
-function FiltroListo({ isAdmin, currentUserName, busqueda, setBusqueda, total, mostrados }) {
-  if (!isAdmin) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#F3F4F6", border: "1px solid #E5E7EB", borderRadius: 10, padding: "8px 14px" }}>
-        <span style={{ fontSize: 13, color: "#6B7280" }}>Mostrando solo tus pedidos</span>
-        <span style={{ background: "#111827", color: "#fff", fontSize: 12, fontWeight: 800, padding: "2px 10px", borderRadius: 10 }}>{mostrados}</span>
-      </div>
-    );
-  }
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-      <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-        <span style={{ position: "absolute", left: 14, fontSize: 15, opacity: 0.5, pointerEvents: "none" }}>🔍</span>
-        <input
-          value={busqueda}
-          onChange={e => setBusqueda(e.target.value)}
-          placeholder="Buscar por cliente, vendedor o N° nota de venta..."
-          style={{
-            width: 340, maxWidth: "100%", minWidth: 0, flex: "1 1 240px", boxSizing: "border-box",
-            padding: "11px 14px 11px 40px", borderRadius: 10,
-            border: "1px solid #E5E7EB", background: "#fff",
-            fontSize: 14, color: "#111827", outline: "none",
-            fontFamily: "Montserrat, sans-serif",
-          }}
-        />
-        {busqueda && (
-          <button onClick={() => setBusqueda("")} style={{ position: "absolute", right: 10, background: "#F3F4F6", border: "none", borderRadius: "50%", width: 22, height: 22, cursor: "pointer", color: "#6B7280", fontSize: 12 }}>✕</button>
-        )}
-      </div>
-      <span style={{ fontSize: 13, color: "#6B7280", fontWeight: 700 }}>
-        {busqueda ? `${mostrados} de ${total}` : `${total} pedido${total !== 1 ? "s" : ""}`}
-      </span>
-    </div>
-  );
-}
-// Filtra por propiedad (vendedor) o por búsqueda de texto
-function filtrarListo(orders, isAdmin, currentUserName, busqueda) {
-  const mismoVendedor = (o) => notifKey(o.vendedor) === notifKey(currentUserName);
-  if (!isAdmin) return orders.filter(mismoVendedor);
-  const q = (busqueda || "").trim().toLowerCase();
-  if (!q) return orders;
-  return orders.filter(o =>
-    (o.cliente || "").toLowerCase().includes(q) ||
-    (o.vendedor || "").toLowerCase().includes(q) ||
-    (o.notaVenta || "").toLowerCase().includes(q)
   );
 }
 
 // ─── LISTO: ENTREGADO ─────────────────────────────────────────────────────────
 function ListoEntregadoView({ orders, onDetail, isAdmin, currentUserName, onDelete }) {
-  const isMobile = useIsMobile();
-  const [busqueda, setBusqueda] = useState("");
-  const filtrados = filtrarListo(orders, isAdmin, currentUserName, busqueda);
+  const propios = isAdmin ? orders : orders.filter(o => notifKey(o.vendedor) === notifKey(currentUserName));
+  const f = useFiltros(propios);
+  const [tope, setTope] = useState(60);
+  const ordenados = [...f.visibles].sort((a, b) => new Date(b.deliveredAt) - new Date(a.deliveredAt));
+  const lista = ordenados.slice(0, tope);
+
+  const acciones = o => (
+    <>
+      {isAdmin && onDelete && <BotonPanel tono="rojo" onClick={() => onDelete(o.id)}>Eliminar pedido</BotonPanel>}
+      {!isAdmin && <span style={{ fontSize: 13, color: "#949BA8" }}>Entregado el {fmtDate(o.deliveredAt)}</span>}
+    </>
+  );
+
   return (
     <div>
-      <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-        <div>
-          <h2 style={{ ...S.pageTitle, margin: 0 }}>Entregado</h2>
-          <p style={{ fontSize: 12, color: "#9CA3AF", margin: "4px 0 0", fontFamily: "Montserrat, sans-serif" }}>
-            Registro completo de todos los pedidos entregados al cliente.
-          </p>
+      <EncabezadoVista titulo="Entregado" orders={ordenados} extra="facturado"
+        bajada={isAdmin ? "Historial completo de pedidos entregados al cliente." : "Tus pedidos ya entregados."} />
+      <BarraFiltros {...f.props} />
+      <TablaPedidos orders={lista} agrupar={false} onDetail={onDetail} acciones={acciones}
+        fechaEtiqueta="deliveredAt" mostrarPlazo={false} colFecha="Entregado" colPlazo=""
+        vacio={f.props.busca ? "Sin resultados para esa búsqueda" : (isAdmin ? "No hay pedidos entregados aún" : "No tienes pedidos entregados")} />
+      {ordenados.length > lista.length && (
+        <div style={{ textAlign: "center", marginTop: -6, marginBottom: 20 }}>
+          <button onClick={() => setTope(t => t + 60)}
+            style={{ background: "#fff", border: "1px solid #E4E7EC", borderRadius: 11, padding: "12px 24px",
+                     fontFamily: "Montserrat, sans-serif", fontSize: 13.5, fontWeight: 700, color: "#141619", cursor: "pointer" }}>
+            Ver 60 más · quedan {ordenados.length - lista.length}
+          </button>
         </div>
-        <FiltroListo isAdmin={isAdmin} currentUserName={currentUserName} busqueda={busqueda} setBusqueda={setBusqueda} total={orders.length} mostrados={filtrados.length} />
-      </div>
-      {filtrados.length === 0
-        ? <div style={S.emptyCard}>{busqueda ? "Sin resultados para esa búsqueda" : (isAdmin ? "No hay pedidos entregados aún" : "No tienes pedidos entregados")}</div>
-        : filtrados.map(o => (
-          <div key={o.id} style={{ ...S.orderCard, ...(isMobile ? { flexDirection: "column", alignItems: "stretch", gap: 10, padding: "14px" } : {}), borderLeft: `${isMobile ? 4 : 3}px solid #374151` }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-                <span style={{ fontWeight: 800, fontSize: 15, color: "#111827", textTransform: "uppercase" }}>{o.cliente}</span>
-                <span style={{ ...S.chip, background: "#F3F4F6", color: "#374151" }}>✓ ENTREGADO</span>
-                <span style={{ ...S.chip, background: o.type === "four" ? "#EFF6FF" : (o.stage === "diseno" ? "#FEE2E2" : "#FEF3C7"), color: o.type === "four" ? "#3B82F6" : (o.stage === "diseno" ? "#DC2626" : "#D97706") }}>
-                  {o.type === "four" ? (o.express ? "⚡ EXPRESS" : "FOUR") : (o.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN")}
-                </span>
-                {o.notaVenta && <span style={{ ...S.chip, background: "#111827", color: "#fff", fontWeight: 800 }}>NV #{o.notaVenta}</span>}
-              </div>
-              <div style={{ display: "flex", gap: 12, fontSize: 14, color: "#4B5563", flexWrap: "wrap", marginBottom: 4 }}>
-                <span style={{ fontWeight: 800, color: "#374151" }}>{o.vendedor}</span><span>·</span>
-                <span>{o.deporte}</span><span>·</span>
-                <span>{o.cantidad} prendas</span><span>·</span>
-                <span style={{ fontWeight: 700, color: "#374151" }}>{fmtCurrency(o.valor)}</span>
-              </div>
-              <div style={{ display: "flex", gap: 16, marginTop: 5, flexWrap: "wrap" }}>
-                <div style={{ fontSize: 11, color: "#9CA3AF" }}>
-                  Ingresado: <span style={{ color: "#6B7280", fontWeight: 600 }}>{fmtDate(o.createdAt)}</span>
-                </div>
-                <div style={{ fontSize: 11, color: "#9CA3AF" }}>
-                  Listo: <span style={{ color: "#6B7280", fontWeight: 600 }}>{fmtDate(o.listoAt)}</span>
-                </div>
-                <div style={{ fontSize: 11, color: "#059669", fontWeight: 700 }}>
-                  ✓ Entregado: {fmtDate(o.deliveredAt)}
-                </div>
-                {o.despachador && (
-                  <div style={{ fontSize: 11, color: "#9CA3AF" }}>
-                    Por: <span style={{ color: "#6B7280", fontWeight: 600 }}>{o.despachador}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className={isMobile ? "fs-scroll-x" : ""} style={{ display: "flex", flexDirection: isMobile ? "row" : "column", gap: isMobile ? 8 : 6, alignItems: isMobile ? "center" : "flex-end", flexShrink: 0, marginLeft: isMobile ? 0 : 12, paddingTop: isMobile ? 10 : 0, borderTop: isMobile ? "1px solid #F3F4F6" : "none" }}>
-              <div style={{ textAlign: isMobile ? "left" : "right", flexShrink: 0 }}>
-                <div style={{ fontSize: 16, fontWeight: 900, color: "#111827" }}>{fmtCurrency(o.valor)}</div>
-                <div style={{ fontSize: 10, color: "#9CA3AF", letterSpacing: "0.06em", marginTop: 2 }}>VALOR PEDIDO</div>
-              </div>
-              <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
-              <ActivityButton order={o} />
-              {isAdmin && onDelete && (
-                <button style={{ ...S.actionBtn, background: "#FEE2E2", color: "#DC2626", border: "1px solid #FECACA", fontWeight: 800 }} onClick={() => onDelete(o.id)} title="Eliminar pedido">✕ Eliminar</button>
-              )}
-            </div>
-          </div>
-        ))
-      }
+      )}
     </div>
   );
 }
 
-// ─── USUARIOS VIEW ────────────────────────────────────────────────────────────
 function UsuariosView({ currentUser }) {
   const isMobile = useIsMobile();
   const [users, setUsers]       = useState([]);
