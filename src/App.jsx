@@ -456,6 +456,50 @@ function loadData() {
 function saveData(d) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {} }
 
 // ─── DEADLINE BADGE ───────────────────────────────────────────────────────────
+// ─── RESPONSIVE: detección de pantalla ───────────────────────────────────────
+function useIsMobile(bp = 820) {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth <= bp);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= bp);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => { window.removeEventListener("resize", onResize); window.removeEventListener("orientationchange", onResize); };
+  }, [bp]);
+  return isMobile;
+}
+
+// CSS global para móvil (lo que los estilos en línea no pueden resolver)
+const GLOBAL_CSS = `
+  * { -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; overflow-x: hidden; }
+  body { -webkit-text-size-adjust: 100%; }
+  .fs-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .fs-scroll-x::-webkit-scrollbar { display: none; }
+  @media (max-width: 820px) {
+    input, select, textarea { font-size: 16px !important; }
+    .fs-hide-mobile { display: none !important; }
+  }
+  @media (min-width: 821px) {
+    .fs-only-mobile { display: none !important; }
+  }
+  @keyframes fsSlideUp { from { transform: translateY(14px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .fs-sheet { animation: fsSlideUp .22s ease-out; }
+`;
+function GlobalStyles() {
+  useEffect(() => {
+    if (document.getElementById("fs-global-css")) return;
+    const el = document.createElement("style");
+    el.id = "fs-global-css";
+    el.textContent = GLOBAL_CSS;
+    document.head.appendChild(el);
+    // viewport con safe-area para iPhone
+    let vp = document.querySelector("meta[name=viewport]");
+    if (!vp) { vp = document.createElement("meta"); vp.name = "viewport"; document.head.appendChild(vp); }
+    vp.content = "width=device-width, initial-scale=1, viewport-fit=cover";
+  }, []);
+  return null;
+}
+
 function DeadlineBadge({ dl }) {
   const days = dLeft(dl);
   let bg, color, text;
@@ -650,8 +694,87 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDet
   const exclusivaAprobada = order.exclusivaEstado === "aprobada";
   const exclusivaHoy = esExclusivaHoy(order);
   const cardAccent = exclusivaAprobada ? "#8B5CF6" : (urgent ? "#EF4444" : accentColor);
+  const isMobile = useIsMobile();
+
+  // Etiquetas de estado (compartidas entre móvil y escritorio)
+  const chips = (
+    <>
+      {isFour && order.express && <span style={S.chipExpress}>⚡ EXPRESS</span>}
+      {!isFour && <span style={{ ...S.chip, background: order.stage === "diseno" ? "#FEE2E2" : "#FEF3C7", color: order.stage === "diseno" ? "#DC2626" : "#D97706" }}>{order.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN"}</span>}
+      {order.type === "sub" && order.stage === "diseno" && !order.listoAt && (
+        order.maquetaEstado === "revision" ? <span style={{ ...S.chip, background: "#DBEAFE", color: "#1D4ED8" }}>🖼 MAQUETA EN REVISIÓN</span>
+        : order.maquetaEstado === "ajustes" ? <span style={{ ...S.chip, background: "#FEE2E2", color: "#DC2626" }}>🔧 MAQUETA EN AJUSTES</span>
+        : <span style={{ ...S.chip, background: "#F3F4F6", color: "#6B7280" }}>⏳ ESPERANDO MAQUETA</span>
+      )}
+      {exclusivaAprobada && <span style={{ ...S.chip, background: "#EDE9FE", color: "#6D28D9", fontWeight: 800 }}>⭐ EXCLUSIVO {order.exclusivaFecha ? fmtDate(order.exclusivaFecha) : ""}</span>}
+      {order.exclusivaEstado === "pendiente" && <span style={{ ...S.chip, background: "#FEF9C3", color: "#A16207" }}>⭐ EXCLUSIVA PENDIENTE</span>}
+      {order.listoAt && !order.deliveredAt && <span style={{ ...S.chip, background: "#DCFCE7", color: "#15803D" }}>✓ LISTO</span>}
+      {totalFiles > 0 && <span style={{ ...S.chip, background: "#EFF6FF", color: "#3B82F6" }}>📎 {totalFiles}</span>}
+    </>
+  );
+
+  // Botones de acción (compartidos)
+  const acciones = (
+    <>
+      <ImpresoBadge order={order} />
+      {onDetail && <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={onDetail}>🔍 Detalle</button>}
+      <ActivityButton order={order} />
+      {isAdmin && onRevision && <button style={{ ...S.actionBtn, background: "#F59E0B", color: "#fff" }} onClick={onRevision}>⚠ Revisión</button>}
+      {onApprove && order.stage === "diseno" && <button style={{ ...S.actionBtn, background: "#7C3AED", color: "#fff" }} onClick={onApprove}>✓ Aprobado</button>}
+      {onDeliver && isAdmin && <button style={{ ...S.actionBtn, background: "#059669", color: "#fff" }} onClick={onDeliver}>✓ Marcar listo</button>}
+      {isAdmin && onDelete && <button style={{ ...S.actionBtn, background: "#FEE2E2", color: "#DC2626", border: "1px solid #FECACA", fontWeight: 800, fontSize: 16, padding: "4px 10px", lineHeight: 1 }} onClick={onDelete} title="Eliminar pedido">✕</button>}
+    </>
+  );
+
+  const cardBg = exclusivaHoy ? "#F5F3FF" : (exclusivaAprobada ? "#FAF9FF" : "#fff");
+
+  // ── MÓVIL: tarjeta apilada ──
+  if (isMobile) {
+    return (
+      <div style={{
+        background: cardBg, border: "1px solid #E5E7EB",
+        borderLeft: `${exclusivaAprobada ? 5 : 4}px solid ${cardAccent}`,
+        borderRadius: 14, padding: "14px 14px 12px", marginBottom: 10,
+      }}>
+        {/* Fila 1: número + cliente + plazo */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
+          {position != null && (
+            <div style={{ flexShrink: 0, width: 28, height: 28, borderRadius: "50%", background: cardAccent, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 900, fontFamily: "NikeFutura, Montserrat, sans-serif" }}>
+              {position}
+            </div>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 900, fontSize: 17, color: "#111827", textTransform: "uppercase", lineHeight: 1.2, wordBreak: "break-word" }}>{order.cliente}</div>
+          </div>
+          {dl && <div style={{ flexShrink: 0 }}><DeadlineBadge dl={dl} /></div>}
+        </div>
+
+        {/* Etiquetas */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{chips}</div>
+
+        {/* Datos */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px", fontSize: 14, color: "#4B5563", marginBottom: 4 }}>
+          <span style={{ fontWeight: 800, color: "#374151" }}>{order.vendedor}</span>
+          <span style={{ color: "#D1D5DB" }}>·</span><span>{order.deporte}</span>
+          <span style={{ color: "#D1D5DB" }}>·</span><span>{order.cantidad} prendas</span>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px", fontSize: 14, marginBottom: 12, alignItems: "center" }}>
+          <span style={{ fontWeight: 800, color: "#111827", fontSize: 15 }}>{fmtCurrency(order.valor)}</span>
+          {order.notaVenta && <span style={{ ...S.chip, background: "#111827", color: "#fff", fontWeight: 800 }}>NV #{order.notaVenta}</span>}
+          <span style={{ color: "#9CA3AF", fontSize: 13 }}>📅 {fmtDate(order.createdAt)}</span>
+        </div>
+
+        {/* Acciones: fila deslizable */}
+        <div className="fs-scroll-x" style={{ display: "flex", gap: 7, paddingTop: 10, borderTop: "1px solid #F3F4F6", margin: "0 -2px", padding: "10px 2px 0" }}>
+          {acciones}
+        </div>
+      </div>
+    );
+  }
+
+  // ── ESCRITORIO: diseño original ──
   return (
-    <div style={{ ...S.orderCard, borderLeft: `${exclusivaAprobada ? 5 : 3}px solid ${cardAccent}`, background: exclusivaHoy ? "#F5F3FF" : (exclusivaAprobada ? "#FAF9FF" : "#fff") }}>
+    <div style={{ ...S.orderCard, borderLeft: `${exclusivaAprobada ? 5 : 3}px solid ${cardAccent}`, background: cardBg }}>
       {position != null && (
         <div style={{ flexShrink: 0, width: 34, height: 34, borderRadius: "50%", background: cardAccent, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 900, marginRight: 14, fontFamily: "NikeFutura, Montserrat, sans-serif" }}>
           {position}
@@ -660,17 +783,7 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDet
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
           <span style={{ fontWeight: 900, fontSize: 18, color: "#111827", textTransform: "uppercase", letterSpacing: "0.02em" }}>{order.cliente}</span>
-          {isFour && order.express && <span style={S.chipExpress}>⚡ EXPRESS</span>}
-          {!isFour && <span style={{ ...S.chip, background: order.stage === "diseno" ? "#FEE2E2" : "#FEF3C7", color: order.stage === "diseno" ? "#DC2626" : "#D97706" }}>{order.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN"}</span>}
-          {order.type === "sub" && order.stage === "diseno" && !order.listoAt && (
-            order.maquetaEstado === "revision" ? <span style={{ ...S.chip, background: "#DBEAFE", color: "#1D4ED8" }}>🖼 MAQUETA EN REVISIÓN</span>
-            : order.maquetaEstado === "ajustes" ? <span style={{ ...S.chip, background: "#FEE2E2", color: "#DC2626" }}>🔧 MAQUETA EN AJUSTES</span>
-            : <span style={{ ...S.chip, background: "#F3F4F6", color: "#6B7280" }}>⏳ ESPERANDO MAQUETA</span>
-          )}
-          {exclusivaAprobada && <span style={{ ...S.chip, background: "#EDE9FE", color: "#6D28D9", fontWeight: 800 }}>⭐ EXCLUSIVO {order.exclusivaFecha ? fmtDate(order.exclusivaFecha) : ""}</span>}
-          {order.exclusivaEstado === "pendiente" && <span style={{ ...S.chip, background: "#FEF9C3", color: "#A16207" }}>⭐ EXCLUSIVA PENDIENTE</span>}
-          {order.listoAt && !order.deliveredAt && <span style={{ ...S.chip, background: "#DCFCE7", color: "#15803D" }}>✓ LISTO</span>}
-          {totalFiles > 0 && <span style={{ ...S.chip, background: "#EFF6FF", color: "#3B82F6" }}>📎 {totalFiles}</span>}
+          {chips}
         </div>
         <div style={{ display: "flex", gap: 12, fontSize: 14, color: "#4B5563", flexWrap: "wrap", marginBottom: 5, alignItems: "center" }}>
           <span style={{ fontWeight: 800, color: "#374151" }}>{order.vendedor}</span>
@@ -681,27 +794,10 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDet
         </div>
         <div style={{ fontSize: 14, color: "#6B7280", fontWeight: 600, marginTop: 5 }}>📅 {fmtDate(order.createdAt)} <span style={{ color: "#9CA3AF" }}>{order.horaEnvio}</span></div>
       </div>
-      {/* Right: deadline + actions */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0, marginLeft: 12 }}>
         {dl && <DeadlineBadge dl={dl} />}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <ImpresoBadge order={order} />
-          {onDetail && (
-            <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={onDetail}>🔍 Detalle</button>
-          )}
-          <ActivityButton order={order} />
-          {isAdmin && onRevision && (
-            <button style={{ ...S.actionBtn, background: "#F59E0B", color: "#fff" }} onClick={onRevision}>⚠ Revisión</button>
-          )}
-          {onApprove && order.stage === "diseno" && (
-            <button style={{ ...S.actionBtn, background: "#7C3AED", color: "#fff" }} onClick={onApprove}>✓ Aprobado</button>
-          )}
-          {onDeliver && isAdmin && (
-            <button style={{ ...S.actionBtn, background: "#059669", color: "#fff" }} onClick={onDeliver}>✓ Marcar listo</button>
-          )}
-          {isAdmin && onDelete && (
-            <button style={{ ...S.actionBtn, background: "#FEE2E2", color: "#DC2626", border: "1px solid #FECACA", fontWeight: 800, fontSize: 16, padding: "4px 10px", lineHeight: 1 }} onClick={onDelete} title="Eliminar pedido">✕</button>
-          )}
+          {acciones}
         </div>
       </div>
     </div>
@@ -710,7 +806,6 @@ function OrderCard({ order, accentColor, onDeliver, onApprove, onRevision, onDet
 
 // ─── ORDER DETAIL MODAL ────────────────────────────────────────────────────────
 function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFiles }) {
-  if (!initialOrder) return null;
   const [order, setOrder] = useState(initialOrder);
   const [editingFiles, setEditingFiles] = useState(false);
   const [editFiles, setEditFiles] = useState(initialOrder.files || []);
@@ -1091,11 +1186,15 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
     </div>
   ) : null;
 
+  const isMobile = useIsMobile();
+
+  if (!initialOrder || !order) return null;
+
   return (
-    <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ ...S.bigModal, maxWidth: 600 }}>
+    <div style={isMobile ? S.overlayMobile : S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className={isMobile ? "fs-sheet" : ""} style={isMobile ? S.bigModalMobile : { ...S.bigModal, maxWidth: 600 }}>
         {/* Header */}
-        <div style={{ ...S.bigModalHeader, background: "#111827", borderRadius: "18px 18px 0 0" }}>
+        <div style={{ ...(isMobile ? S.bigModalHeaderMobile : S.bigModalHeader), background: "#111827", borderRadius: "18px 18px 0 0" }}>
           <div>
             <div style={{ fontWeight: 900, fontSize: 15, color: "#F9FAFB", letterSpacing: "0.04em" }}>{order.cliente}</div>
             <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>
@@ -1106,7 +1205,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
         </div>
 
         {/* Body */}
-        <div style={{ ...S.bigModalBody, padding: "24px 28px" }}>
+        <div style={isMobile ? S.bigModalBodyMobile : { ...S.bigModalBody, padding: "24px 28px" }}>
 
           {/* Status badges */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
@@ -1326,7 +1425,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
           {editingInfo ? (
             <div style={{ background: "#F0F9FF", border: "1px solid #BAE6FD", borderRadius: 12, padding: 18, marginBottom: 16 }}>
               <div style={{ fontSize: 12, color: "#0369A1", fontWeight: 700, marginBottom: 14 }}>✏ Editando información del pedido</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
                 <div style={{ gridColumn: "1 / -1" }}>
                   <label style={S.label}>Cliente *</label>
                   <input style={{ ...S.input, marginTop: 5 }} value={editForm.cliente} onChange={e => setEditForm({...editForm, cliente: e.target.value})} placeholder="Nombre del cliente" />
@@ -1443,8 +1542,8 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
           )}
         </div>
 
-        <div style={{ ...S.bigModalFooter }}>
-          <button style={S.btnGhost} onClick={onClose}>Cerrar</button>
+        <div style={isMobile ? S.bigModalFooterMobile : { ...S.bigModalFooter }}>
+          <button style={{ ...S.btnGhost, ...(isMobile ? { flex: 1, padding: "14px", fontSize: 14 } : {}) }} onClick={onClose}>Cerrar</button>
         </div>
       </div>
 
@@ -1504,6 +1603,7 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
   } : { ...baseForm, vendedor: isAdmin ? baseForm.vendedor : vendedorDeCuenta(currentUserName), fechaEnvio: chileDateStr(), horaEnvio: chileTimeStr() });
   const [saving, setSaving] = useState(false);
   const isEdit = !!editOrder;
+  const isMobile = useIsMobile();
   const [confirmClose, setConfirmClose] = useState(false);
   // ¿Hay datos escritos que se perderían al cerrar?
   const hayDatos = !!(form.cliente || form.notaVenta || form.cantidad || form.valor || form.notas || (form.files || []).length || (form.filesNota || []).length || (form.filesMaqueta || []).length);
@@ -1539,13 +1639,13 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
   };
 
   return (
-    <div style={S.overlay}>
-      <div style={S.bigModal}>
-        <div style={S.bigModalHeader}>
+    <div style={isMobile ? S.overlayMobile : S.overlay}>
+      <div className={isMobile ? "fs-sheet" : ""} style={isMobile ? S.bigModalMobile : S.bigModal}>
+        <div style={isMobile ? S.bigModalHeaderMobile : S.bigModalHeader}>
           <span style={{ fontWeight: 900, fontSize: 14, color: "#111827", letterSpacing: "0.06em" }}>{isEdit ? "✏ EDITAR PEDIDO" : "NUEVO PEDIDO"}</span>
           <button onClick={solicitarCierre} style={{ background: "none", border: "none", color: "#9CA3AF", fontSize: 18, cursor: "pointer" }}>✕</button>
         </div>
-        <div style={S.bigModalBody}>
+        <div style={isMobile ? S.bigModalBodyMobile : S.bigModalBody}>
           {/* Tipo */}
           <div style={{ marginBottom: 20 }}>
             <div style={S.label}>Tipo de pedido *</div>
@@ -1566,7 +1666,7 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
           {tipo && (
             <>
               <div style={{ height: 1, background: "#F3F4F6", margin: "0 0 18px" }} />
-              <div style={S.formGrid}>
+              <div style={isMobile ? S.formGridMobile : S.formGrid}>
                 <Field label="Cliente *"><input style={S.input} value={form.cliente} placeholder="Nombre del cliente" onChange={e => setForm({ ...form, cliente: e.target.value })} /></Field>
                 <Field label="N° Nota de Venta *"><input style={S.input} value={form.notaVenta} placeholder="Ej: 000123" onChange={e => setForm({ ...form, notaVenta: e.target.value })} /></Field>
                 <Field label="Vendedor *">
@@ -1645,10 +1745,10 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
             </>
           )}
         </div>
-        <div style={S.bigModalFooter}>
-          <button style={S.btnGhost} onClick={solicitarCierre}>Cancelar</button>
-          {dateError && <span style={{ color: "#DC2626", fontSize: 12, fontWeight: 600, marginRight: 12, alignSelf: "center" }}>{dateError}</span>}
-          <button style={!canSubmit || saving ? S.btnDisabled : { ...S.btnPrimary, background: tipo === "sub" ? "#7C3AED" : "#111827" }}
+        <div style={isMobile ? S.bigModalFooterMobile : S.bigModalFooter}>
+          <button style={{ ...S.btnGhost, ...(isMobile ? { flex: 1, padding: "15px", fontSize: 14 } : {}) }} onClick={solicitarCierre}>Cancelar</button>
+          {dateError && !isMobile && <span style={{ color: "#DC2626", fontSize: 12, fontWeight: 600, marginRight: 12, alignSelf: "center" }}>{dateError}</span>}
+          <button style={{ ...(!canSubmit || saving ? S.btnDisabled : { ...S.btnPrimary, background: tipo === "sub" ? "#7C3AED" : "#111827" }), ...(isMobile ? { flex: 2, padding: "15px", fontSize: 14 } : {}) }}
             onClick={submit} disabled={!canSubmit || saving}>
             {saving ? "Guardando…" : isEdit ? "GUARDAR CAMBIOS →" : "INGRESAR PEDIDO →"}
           </button>
@@ -1770,6 +1870,8 @@ export default function App() {
   const [editOrder, setEditOrder]     = useState(null);
   const [detailOrder, setDetailOrder] = useState(null);
   const [confirm, setConfirm]         = useState(null);
+  const isMobile                      = useIsMobile();
+  const [mobileMenu, setMobileMenu]   = useState(false);
   const [fotoModal, setFotoModal]     = useState(null); // pedido recién marcado listo
   const [maquetaAviso, setMaquetaAviso] = useState(null); // aviso de maqueta nueva para el vendedor
   const [pedidosOpen, setPedidosOpen] = useState(false);
@@ -2196,15 +2298,16 @@ export default function App() {
   return (
     <AppContext.Provider value={{ userName: user.name, onToggleImpreso: toggleImpreso }}>
     <div style={S.app}>
+      <GlobalStyles />
       <header style={S.header}>
-        <div style={S.headerInner}>
+        <div style={{ ...S.headerInner, ...(isMobile ? { padding: "0 16px", height: 60, gap: 10 } : {}) }}>
           {/* Logo */}
-          <div style={{ background: "#fff", borderRadius: 8, padding: "4px 10px", display: "flex", alignItems: "center", flexShrink: 0 }}>
-            <img src={LOGO_IMG} alt="Four Sport" style={{ height: 26, display: "block" }} />
+          <div style={{ background: "#fff", borderRadius: 8, padding: isMobile ? "3px 8px" : "4px 10px", display: "flex", alignItems: "center", flexShrink: 0 }}>
+            <img src={LOGO_IMG} alt="Four Sport" style={{ height: isMobile ? 20 : 26, display: "block" }} />
           </div>
 
-          {/* Nav */}
-          <nav style={{ display: "flex", gap: 2, alignItems: "center", flex: 1, justifyContent: "center" }}>
+          {/* Nav (solo escritorio) */}
+          <nav style={{ display: isMobile ? "none" : "flex", gap: 2, alignItems: "center", flex: 1, justifyContent: "center" }}>
             {/* Dashboard */}
             <button onClick={() => setView("dashboard")}
               style={{ ...S.navBtn, ...(view === "dashboard" ? S.navBtnActive : {}) }}>
@@ -2358,26 +2461,38 @@ export default function App() {
                 </div>
               )}
             </div>
-            <span style={{ fontSize: 13, color: "#FFFFFF", fontWeight: 700 }}>{user.name}</span>
-            <button onClick={() => setShowPassModal(true)} title="Cambiar clave" style={{ fontSize: 13, color: "#FFFFFF", background: "none", border: "1px solid #6B7280", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontFamily: "Montserrat, sans-serif", fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>⚙ Clave</button>
-            <button onClick={handleLogout} style={{ fontSize: 13, color: "#FFFFFF", background: "none", border: "1px solid #6B7280", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontFamily: "Montserrat, sans-serif", fontWeight: 700 }}>Salir</button>
+            {isMobile ? (
+              <button onClick={() => setMobileMenu(true)} aria-label="Menú"
+                style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 11px 5px 5px", borderRadius: 20, background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.18)", cursor: "pointer", flexShrink: 0 }}>
+                <span style={{ width: 27, height: 27, borderRadius: "50%", background: "#39FF14", color: "#111827", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 13, fontFamily: "NikeFutura, Montserrat, sans-serif" }}>
+                  {(user.name || "?").charAt(0).toUpperCase()}
+                </span>
+                <span style={{ color: "#fff", fontSize: 15, lineHeight: 1 }}>☰</span>
+              </button>
+            ) : (
+              <>
+                <span style={{ fontSize: 13, color: "#FFFFFF", fontWeight: 700 }}>{user.name}</span>
+                <button onClick={() => setShowPassModal(true)} title="Cambiar clave" style={{ fontSize: 13, color: "#FFFFFF", background: "none", border: "1px solid #6B7280", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontFamily: "Montserrat, sans-serif", fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>⚙ Clave</button>
+                <button onClick={handleLogout} style={{ fontSize: 13, color: "#FFFFFF", background: "none", border: "1px solid #6B7280", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontFamily: "Montserrat, sans-serif", fontWeight: 700 }}>Salir</button>
+              </>
+            )}
           </div>
         </div>
       </header>
 
-      <main style={S.main}>
+      <main style={{ ...S.main, ...(isMobile ? { padding: "16px 14px calc(96px + env(safe-area-inset-bottom))" } : {}) }}>
         {/* ── Barra de búsqueda ── */}
-        <div style={{ marginBottom: 24, position: "relative" }}>
+        <div style={{ marginBottom: isMobile ? 16 : 24, position: "relative" }}>
           <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-            <span style={{ position: "absolute", left: 18, fontSize: 18, opacity: 0.5, pointerEvents: "none" }}>🔍</span>
+            <span style={{ position: "absolute", left: isMobile ? 15 : 18, fontSize: 17, opacity: 0.5, pointerEvents: "none" }}>🔍</span>
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="¿Qué pedido quieres buscar?"
               style={{
                 width: "100%", boxSizing: "border-box",
-                padding: "16px 18px 16px 50px",
-                borderRadius: 16,
+                padding: isMobile ? "13px 16px 13px 44px" : "16px 18px 16px 50px",
+                borderRadius: isMobile ? 13 : 16,
                 border: "1px solid #E5E7EB",
                 background: "linear-gradient(180deg, #FFFFFF 0%, #FAFAFA 100%)",
                 fontSize: 15, color: "#111827", outline: "none",
@@ -2442,6 +2557,11 @@ export default function App() {
           })()}
         </div>
 
+        {isMobile && (
+          <MobileSubTabs view={view} setView={setView}
+            counts={{ pendientes: allPending.length, listo: (data.listo || []).length, atrasados: atrasadosCount }} />
+        )}
+
         {/* Alerta para vendedores con pedidos en revisión */}
         {!isAdmin && (() => {
           const myRevision = (data.revision || []).filter(o => o.vendedor === user.name);
@@ -2485,12 +2605,12 @@ export default function App() {
           );
         })()}
         {view === "revision"        && <RevisionView orders={data.revision || []} isAdmin={isAdmin} onRestore={restoreFromRevision} onMarkListo={id => setConfirm({ type: "rev", id, action: "deliver" })} onEdit={o => setEditOrder(o)} onDetail={o => setDetailOrder(o)} canEditOrders={user?.name?.toLowerCase().includes("genaro") || user?.email?.toLowerCase().includes("genaro")} />}
-        {view === "listo_pendiente" && <ListoPendienteView orders={data.listo || []} onEntregado={id => setConfirm({ type: "listo", id, action: "despachar" })} onDetail={o => setDetailOrder(o)} />}
-        {view === "listo_entregado" && <ListoEntregadoView orders={data.delivered || []} onDetail={o => setDetailOrder(o)} isAdmin={isAdmin} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} />}
+        {view === "listo_pendiente" && <ListoPendienteView orders={data.listo || []} onEntregado={id => setConfirm({ type: "listo", id, action: "despachar" })} onDetail={o => setDetailOrder(o)} isAdmin={isAdmin} currentUserName={user?.name || ""} />}
+        {view === "listo_entregado" && <ListoEntregadoView orders={data.delivered || []} onDetail={o => setDetailOrder(o)} isAdmin={isAdmin} currentUserName={user?.name || ""} onDelete={id => setConfirm({ type: "any", id, action: "delete" })} />}
         {view === "usuarios"        && isAdmin && <UsuariosView currentUser={user} />}
       </main>
 
-      <button style={S.fab} onClick={() => setShowNew(true)}>＋</button>
+      <button style={{ ...S.fab, ...(isMobile ? { bottom: "calc(86px + env(safe-area-inset-bottom))", right: 18, width: 54, height: 54, fontSize: 27 } : {}) }} onClick={() => setShowNew(true)}>＋</button>
       {(showNew || (editOrder && (user?.name?.toLowerCase().includes("genaro") || user?.email?.toLowerCase().includes("genaro")))) && (
         <NewOrderModal
           onClose={() => { setShowNew(false); setEditOrder(null); }}
@@ -2624,6 +2744,19 @@ export default function App() {
         />
       )}
 
+      {/* ── Navegación inferior (móvil) ── */}
+      {isMobile && (
+        <BottomNav view={view} setView={setView} isAdmin={isAdmin}
+          counts={{ pendientes: allPending.length, revision: revisionCount, listo: (data.listo || []).length, atrasados: atrasadosCount }} />
+      )}
+      {isMobile && mobileMenu && (
+        <MobileMenu user={user} isAdmin={isAdmin} view={view} setView={setView}
+          onClose={() => setMobileMenu(false)}
+          onClave={() => setShowPassModal(true)}
+          onLogout={handleLogout}
+          counts={{ pendientes: allPending.length, revision: revisionCount, listo: (data.listo || []).length, atrasados: atrasadosCount }} />
+      )}
+
       {/* ── Modal cambiar clave ── */}
       {showPassModal && (
         <ChangePasswordModal
@@ -2652,6 +2785,149 @@ export default function App() {
       />
     </div>
     </AppContext.Provider>
+  );
+}
+
+// ─── SUB-PESTAÑAS (MÓVIL) ────────────────────────────────────────────────────
+function MobileSubTabs({ view, setView, counts }) {
+  const grupos = {
+    pedidos: [
+      { id: "todos", label: "Todos", badge: counts.pendientes },
+      { id: "four", label: "Four" },
+      { id: "sub", label: "Sublimados" },
+      { id: "atrasados", label: "Atrasados", badge: counts.atrasados, alerta: true },
+    ],
+    listos: [
+      { id: "listo_pendiente", label: "Por entregar", badge: counts.listo },
+      { id: "listo_entregado", label: "Entregados" },
+    ],
+  };
+  const grupo = grupos.pedidos.some(t => t.id === view) ? grupos.pedidos
+              : grupos.listos.some(t => t.id === view) ? grupos.listos
+              : null;
+  if (!grupo) return null;
+  return (
+    <div className="fs-scroll-x" style={{ display: "flex", gap: 7, marginBottom: 14, paddingBottom: 2 }}>
+      {grupo.map(t => {
+        const act = view === t.id;
+        return (
+          <button key={t.id} onClick={() => setView(t.id)}
+            style={{
+              flexShrink: 0, display: "flex", alignItems: "center", gap: 6,
+              padding: "9px 15px", borderRadius: 20, cursor: "pointer",
+              border: `1px solid ${act ? "#111827" : "#E5E7EB"}`,
+              background: act ? "#111827" : "#fff",
+              color: act ? "#fff" : "#6B7280",
+              fontSize: 13, fontWeight: 800, fontFamily: "Montserrat, sans-serif",
+              whiteSpace: "nowrap",
+            }}>
+            {t.label}
+            {t.badge > 0 && (
+              <span style={{
+                background: act ? "rgba(255,255,255,.22)" : (t.alerta ? "#FEE2E2" : "#F3F4F6"),
+                color: act ? "#fff" : (t.alerta ? "#DC2626" : "#6B7280"),
+                fontSize: 11, fontWeight: 900, padding: "1px 7px", borderRadius: 9,
+              }}>{t.badge}</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── NAVEGACIÓN INFERIOR (MÓVIL) ─────────────────────────────────────────────
+function BottomNav({ view, setView, counts, isAdmin }) {
+  const items = [
+    { id: "dashboard",       icon: "📊", label: "Inicio",   match: v => v === "dashboard" },
+    { id: "todos",           icon: "📋", label: "Pedidos",  match: v => ["todos","four","sub","atrasados"].includes(v), badge: counts.pendientes },
+    { id: "revision",        icon: "⚠️", label: "Revisión", match: v => v === "revision", badge: counts.revision },
+    { id: "listo_pendiente", icon: "✅", label: "Listos",   match: v => ["listo_pendiente","listo_entregado"].includes(v), badge: counts.listo },
+  ];
+  return (
+    <nav style={{
+      position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 95,
+      background: "#111827", borderTop: "1px solid #1F2937",
+      display: "flex", justifyContent: "space-around", alignItems: "stretch",
+      paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      boxShadow: "0 -4px 20px rgba(0,0,0,0.3)",
+    }}>
+      {items.map(it => {
+        const active = it.match(view);
+        return (
+          <button key={it.id} onClick={() => setView(it.id)}
+            style={{
+              flex: 1, background: "none", border: "none", cursor: "pointer",
+              padding: "9px 4px 11px", display: "flex", flexDirection: "column",
+              alignItems: "center", gap: 3, position: "relative",
+              borderTop: `3px solid ${active ? "#39FF14" : "transparent"}`,
+            }}>
+            <span style={{ fontSize: 20, lineHeight: 1, opacity: active ? 1 : 0.55 }}>{it.icon}</span>
+            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.04em", color: active ? "#39FF14" : "#9CA3AF", fontFamily: "Montserrat, sans-serif" }}>{it.label}</span>
+            {it.badge > 0 && (
+              <span style={{ position: "absolute", top: 4, right: "50%", marginRight: -22, background: "#EF4444", color: "#fff", fontSize: 10, fontWeight: 900, minWidth: 18, height: 18, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid #111827" }}>
+                {it.badge > 99 ? "99+" : it.badge}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+// ─── MENÚ DE USUARIO (MÓVIL) ─────────────────────────────────────────────────
+function MobileMenu({ user, isAdmin, view, setView, onClose, onClave, onLogout, counts }) {
+  const go = v => { setView(v); onClose(); };
+  const Item = ({ id, icon, label, badge }) => (
+    <button onClick={() => go(id)} style={{
+      display: "flex", alignItems: "center", gap: 14, width: "100%",
+      background: view === id ? "#F3F4F6" : "transparent", border: "none",
+      padding: "15px 20px", cursor: "pointer", textAlign: "left",
+      borderRadius: 10, fontFamily: "Montserrat, sans-serif",
+    }}>
+      <span style={{ fontSize: 19 }}>{icon}</span>
+      <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: "#111827" }}>{label}</span>
+      {badge > 0 && <span style={{ background: "#EF4444", color: "#fff", fontSize: 11, fontWeight: 800, padding: "2px 9px", borderRadius: 10 }}>{badge}</span>}
+    </button>
+  );
+  return (
+    <div onClick={e => e.target === e.currentTarget && onClose()}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 500, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+      <div className="fs-sheet" style={{ background: "#fff", borderRadius: "20px 20px 0 0", maxHeight: "88vh", overflowY: "auto", paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}>
+        <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 4px" }}>
+          <div style={{ width: 42, height: 4, borderRadius: 2, background: "#E5E7EB" }} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 13, padding: "12px 20px 18px", borderBottom: "1px solid #F3F4F6" }}>
+          <div style={{ width: 46, height: 46, borderRadius: "50%", background: "#111827", color: "#39FF14", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 19, fontFamily: "NikeFutura, Montserrat, sans-serif" }}>
+            {(user.name || "?").charAt(0).toUpperCase()}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 17, fontWeight: 900, color: "#111827" }}>{user.name}</div>
+            <div style={{ fontSize: 12, color: "#9CA3AF" }}>{isAdmin ? "Administrador" : "Vendedor"}</div>
+          </div>
+          <button onClick={onClose} style={{ background: "#F3F4F6", border: "none", borderRadius: "50%", width: 34, height: 34, fontSize: 17, cursor: "pointer", color: "#6B7280" }}>✕</button>
+        </div>
+
+        <div style={{ padding: "10px 10px 4px" }}>
+          <div style={{ fontSize: 10, fontWeight: 800, color: "#9CA3AF", letterSpacing: "0.1em", padding: "6px 10px" }}>PEDIDOS</div>
+          <Item id="todos" icon="📋" label="Todos los pedidos" badge={counts.pendientes} />
+          <Item id="four" icon="👕" label="Pedidos Four" />
+          <Item id="sub" icon="🎨" label="Sublimados" />
+          <Item id="atrasados" icon="🔥" label="Atrasados" badge={counts.atrasados} />
+          <div style={{ fontSize: 10, fontWeight: 800, color: "#9CA3AF", letterSpacing: "0.1em", padding: "12px 10px 6px" }}>ENTREGA</div>
+          <Item id="revision" icon="⚠️" label="Falta revisión" badge={counts.revision} />
+          <Item id="listo_pendiente" icon="✅" label="Pendiente de entrega" badge={counts.listo} />
+          <Item id="listo_entregado" icon="📦" label="Entregado" />
+          {isAdmin && <Item id="usuarios" icon="👥" label="Usuarios" />}
+        </div>
+
+        <div style={{ display: "flex", gap: 10, padding: "14px 20px 8px", borderTop: "1px solid #F3F4F6" }}>
+          <button onClick={() => { onClave(); onClose(); }} style={{ flex: 1, background: "#F3F4F6", border: "none", borderRadius: 10, padding: "13px", fontSize: 14, fontWeight: 700, color: "#374151", cursor: "pointer", fontFamily: "Montserrat, sans-serif" }}>⚙ Cambiar clave</button>
+          <button onClick={onLogout} style={{ flex: 1, background: "#FEE2E2", border: "none", borderRadius: 10, padding: "13px", fontSize: 14, fontWeight: 700, color: "#DC2626", cursor: "pointer", fontFamily: "Montserrat, sans-serif" }}>Salir</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -2763,6 +3039,7 @@ const EMOJIS = ["👍","👌","🙌","🔥","✅","❌","⚠️","🎨","👕","
 
 function ChatWidget({ open, onOpen, onClose, messages, userName, input, setInput, onSend, unread, privMessages, allUsers, onSendPrivate, onOpenConversation, unreadPrivate }) {
   const scrollRef = useRef(null);
+  const isMobile = useIsMobile();
   const [showEmojis, setShowEmojis] = useState(false);
   const [tab, setTab] = useState("grupal"); // grupal | privado
   const [activeChat, setActiveChat] = useState(null); // nombre del usuario con quien chateo
@@ -2784,7 +3061,10 @@ function ChatWidget({ open, onOpen, onClose, messages, userName, input, setInput
   if (!open) {
     return (
       <button onClick={onOpen} style={{
-        position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", zIndex: 400,
+        position: "fixed", zIndex: 94,
+        ...(isMobile
+          ? { bottom: "calc(86px + env(safe-area-inset-bottom))", left: 18, borderRadius: 26 }
+          : { bottom: 0, left: "50%", transform: "translateX(-50%)" }),
         border: "none", cursor: "pointer",
         background: "linear-gradient(135deg, #111827 0%, #1F2937 100%)",
         color: "#39FF14", fontSize: 14, fontWeight: 800, letterSpacing: "0.08em",
@@ -2857,10 +3137,13 @@ function ChatWidget({ open, onOpen, onClose, messages, userName, input, setInput
 
   return (
     <div style={{
-      position: "fixed", bottom: 28, right: 28, zIndex: 400,
-      width: 380, maxWidth: "calc(100vw - 32px)", height: 560, maxHeight: "calc(100vh - 100px)",
-      background: "#fff", borderRadius: 18, boxShadow: "0 16px 48px rgba(0,0,0,0.28)",
-      display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid #E5E7EB",
+      position: "fixed", zIndex: 400,
+      ...(isMobile
+        ? { inset: 0, width: "100%", maxWidth: "100%", height: "100%", maxHeight: "100%", borderRadius: 0, border: "none" }
+        : { bottom: 28, right: 28, width: 380, maxWidth: "calc(100vw - 32px)", height: 560, maxHeight: "calc(100vh - 100px)", borderRadius: 18, border: "1px solid #E5E7EB" }),
+      background: "#fff", boxShadow: "0 16px 48px rgba(0,0,0,0.28)",
+      display: "flex", flexDirection: "column", overflow: "hidden",
+      paddingBottom: isMobile ? "env(safe-area-inset-bottom)" : 0,
     }}>
       {/* Header */}
       <div style={{ background: "linear-gradient(135deg, #111827 0%, #1F2937 100%)", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -2983,6 +3266,7 @@ function DonutChart({ pending, delivered, size = 200 }) {
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 function Dashboard({ data, allPending }) {
+  const isMobile = useIsMobile();
   const [period, setPeriod] = useState("mes");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -3025,11 +3309,11 @@ function Dashboard({ data, allPending }) {
   return (
     <div>
       {/* Header row */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
-        <h2 style={{ ...S.pageTitle, margin: 0 }}>Dashboard</h2>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", alignItems: isMobile ? "stretch" : "center", flexDirection: isMobile ? "column" : "row", justifyContent: "space-between", marginBottom: isMobile ? 16 : 24, flexWrap: "wrap", gap: 12 }}>
+        <h2 style={{ ...S.pageTitle, margin: 0, fontSize: isMobile ? 22 : 24 }}>Dashboard</h2>
+        <div className={isMobile ? "fs-scroll-x" : ""} style={{ display: "flex", gap: 6, flexWrap: isMobile ? "nowrap" : "wrap", alignItems: "center", paddingBottom: isMobile ? 2 : 0 }}>
           {[["hoy","HOY"],["semana","7D"],["mes","MES"],["anio","AÑO"],["todo","TODO"],["custom","📅"]].map(([v, l]) => (
-            <button key={v} onClick={() => setPeriod(v)} style={period === v ? { ...S.periodBtn, ...S.periodBtnActive } : S.periodBtn}>{l}</button>
+            <button key={v} onClick={() => setPeriod(v)} style={{ ...(period === v ? { ...S.periodBtn, ...S.periodBtnActive } : S.periodBtn), ...(isMobile ? { padding: "9px 16px", fontSize: 12, flexShrink: 0 } : {}) }}>{l}</button>
           ))}
         </div>
       </div>
@@ -3043,7 +3327,7 @@ function Dashboard({ data, allPending }) {
       )}
 
       {/* ── ROW 1: Pedidos pendientes (hero) + mini-stats ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
         {/* Hero: Pedidos pendientes */}
         <div style={{ ...S.card, gridColumn: "1", background: "#111827", borderColor: "#1F2937", display: "flex", flexDirection: "column", justifyContent: "space-between", minHeight: 140 }}>
           <div style={{ fontSize: 14, color: "#9CA3AF", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", fontFamily: "NikeFutura, Montserrat, sans-serif" }}>Pedidos Pendientes</div>
@@ -3079,7 +3363,7 @@ function Dashboard({ data, allPending }) {
       </div>
 
       {/* ── ROW 2: Mini-stats table + Donut ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr auto", gap: 12, marginBottom: 12 }}>
         {/* Mini stats */}
         <div style={{ ...S.card, display: "flex", flexDirection: "column", gap: 0 }}>
           <div style={S.cardTitle}>RESUMEN OPERACIONAL</div>
@@ -3125,7 +3409,7 @@ function Dashboard({ data, allPending }) {
       </div>
 
       {/* ── ROW 3: Top Urgentes ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
         {/* Top Four */}
         <div style={{ ...S.card }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
@@ -3205,7 +3489,7 @@ function Dashboard({ data, allPending }) {
           </div>
           <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600 }}>{totalEstampPedidos} pedidos en el período</span>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 12 }}>
           {byEstampador.map(est => (
             <div key={est.name} style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 12, padding: "18px 20px" }}>
               <div style={{ fontSize: 15, fontWeight: 900, color: "#111827", marginBottom: 14, textTransform: "uppercase", letterSpacing: "0.04em", fontFamily: "NikeFutura, Montserrat, sans-serif" }}>{est.name}</div>
@@ -3503,6 +3787,7 @@ function SubView({ orders, isAdmin, onApprove, onDeliver, onRevision, onDetail, 
 
 // ─── REVISION VIEW ────────────────────────────────────────────────────────────
 function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetail, canEditOrders }) {
+  const isMobile = useIsMobile();
   return (
     <div>
       <h2 style={S.pageTitle}>Falta Revisión</h2>
@@ -3514,7 +3799,7 @@ function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetai
             if (ca !== cb) return ca - cb;
             return new Date(a.revisionAt || 0) - new Date(b.revisionAt || 0);
           }).map(o => (
-          <div key={o.id} style={{ ...S.orderCard, borderLeft: `3px solid ${o.revisionEstado === "corregido" ? "#059669" : "#F59E0B"}`, background: o.revisionEstado === "corregido" ? "#ECFDF5" : "#FFFBEB" }}>
+          <div key={o.id} style={{ ...S.orderCard, ...(isMobile ? { flexDirection: "column", alignItems: "stretch", gap: 10, padding: "14px" } : {}), borderLeft: `${isMobile ? 4 : 3}px solid ${o.revisionEstado === "corregido" ? "#059669" : "#F59E0B"}`, background: o.revisionEstado === "corregido" ? "#ECFDF5" : "#FFFBEB" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
                 <span style={{ fontWeight: 800, fontSize: 15, color: "#111827", textTransform: "uppercase" }}>{o.cliente}</span>
@@ -3539,7 +3824,7 @@ function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetai
                 </div>
               )}
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0, marginLeft: 12 }}>
+            <div className={isMobile ? "fs-scroll-x" : ""} style={{ display: "flex", flexDirection: isMobile ? "row" : "column", gap: isMobile ? 7 : 6, flexShrink: 0, marginLeft: isMobile ? 0 : 12, paddingTop: isMobile ? 10 : 0, borderTop: isMobile ? "1px solid rgba(0,0,0,0.06)" : "none" }}>
               <ImpresoBadge order={o} />
               <button style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151", border: "1px solid #E5E7EB" }} onClick={() => onDetail(o)}>🔍 Detalle</button>
               <ActivityButton order={o} />
@@ -3555,10 +3840,13 @@ function RevisionView({ orders, isAdmin, onRestore, onMarkListo, onEdit, onDetai
 }
 
 // ─── LISTO: PENDIENTE DE ENTREGA ─────────────────────────────────────────────
-function ListoPendienteView({ orders, onEntregado, onDetail }) {
+function ListoPendienteView({ orders, onEntregado, onDetail, isAdmin, currentUserName }) {
+  const isMobile = useIsMobile();
+  const [busqueda, setBusqueda] = useState("");
+  const visibles = filtrarListo(orders, isAdmin, currentUserName, busqueda);
   // Group by day (listoAt date)
   const grouped = {};
-  [...orders].sort((a, b) => new Date(b.listoAt) - new Date(a.listoAt)).forEach(o => {
+  [...visibles].sort((a, b) => new Date(b.listoAt) - new Date(a.listoAt)).forEach(o => {
     const key = o.listoAt ? new Date(o.listoAt).toLocaleDateString("es-CL", { day: "2-digit", month: "long", year: "numeric", timeZone: CHILE_TZ }) : "Sin fecha";
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(o);
@@ -3566,7 +3854,7 @@ function ListoPendienteView({ orders, onEntregado, onDetail }) {
   const groupKeys = Object.keys(grouped);
 
   const renderCard = (o) => (
-          <div key={o.id} style={{ ...S.orderCard, borderLeft: "3px solid #059669", background: "#F0FDF4" }}>
+          <div key={o.id} style={{ ...S.orderCard, ...(isMobile ? { flexDirection: "column", alignItems: "stretch", gap: 10, padding: "14px" } : {}), borderLeft: `${isMobile ? 4 : 3}px solid #059669`, background: "#F0FDF4" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
                 <span style={{ fontWeight: 800, fontSize: 15, color: "#111827", textTransform: "uppercase" }}>{o.cliente}</span>
@@ -3574,9 +3862,10 @@ function ListoPendienteView({ orders, onEntregado, onDetail }) {
                 <span style={{ ...S.chip, background: o.type === "four" ? "#EFF6FF" : (o.stage === "diseno" ? "#FEE2E2" : "#FEF3C7"), color: o.type === "four" ? "#3B82F6" : (o.stage === "diseno" ? "#DC2626" : "#D97706") }}>
                   {o.type === "four" ? (o.express ? "⚡ EXPRESS" : "FOUR") : (o.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN")}
                 </span>
+                {o.notaVenta && <span style={{ ...S.chip, background: "#111827", color: "#fff", fontWeight: 800 }}>NV #{o.notaVenta}</span>}
                 {o.files?.length > 0 && <span style={{ ...S.chip, background: "#EFF6FF", color: "#3B82F6" }}>📎 {o.files.length}</span>}
               </div>
-              <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexWrap: "wrap", marginBottom: 4 }}>
+              <div style={{ display: "flex", gap: 12, fontSize: 14, color: "#4B5563", flexWrap: "wrap", marginBottom: 4 }}>
                 <span style={{ fontWeight: 800, color: "#374151" }}>{o.vendedor}</span><span>·</span>
                 <span>{o.deporte}</span><span>·</span>
                 <span>{o.cantidad} prendas</span><span>·</span>
@@ -3586,8 +3875,8 @@ function ListoPendienteView({ orders, onEntregado, onDetail }) {
                 Listo desde: {fmtDate(o.listoAt)}
               </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0, marginLeft: 12, alignItems: "flex-end" }}>
-              <div style={{ textAlign: "right", marginBottom: 4 }}>
+            <div style={{ display: "flex", flexDirection: isMobile ? "row" : "column", gap: isMobile ? 8 : 6, flexShrink: 0, marginLeft: isMobile ? 0 : 12, alignItems: isMobile ? "center" : "flex-end", justifyContent: isMobile ? "space-between" : undefined, flexWrap: isMobile ? "wrap" : undefined, paddingTop: isMobile ? 10 : 0, borderTop: isMobile ? "1px solid rgba(0,0,0,0.06)" : "none" }}>
+              <div style={{ textAlign: isMobile ? "left" : "right", marginBottom: isMobile ? 0 : 4 }}>
                 <div style={{ fontSize: 16, fontWeight: 900, color: "#059669" }}>{fmtCurrency(o.valor)}</div>
                 <div style={{ fontSize: 10, color: "#9CA3AF", letterSpacing: "0.06em" }}>VALOR PEDIDO</div>
               </div>
@@ -3599,14 +3888,17 @@ function ListoPendienteView({ orders, onEntregado, onDetail }) {
 
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <h2 style={{ ...S.pageTitle, margin: 0 }}>Pendiente de Entrega</h2>
-        <p style={{ fontSize: 12, color: "#9CA3AF", margin: "4px 0 0", fontFamily: "Montserrat, sans-serif" }}>
-          Pedidos listos para entregar al cliente, agrupados por día. Marca como entregado cuando el vendedor lo despache.
-        </p>
+      <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+        <div>
+          <h2 style={{ ...S.pageTitle, margin: 0 }}>Pendiente de Entrega</h2>
+          <p style={{ fontSize: 12, color: "#9CA3AF", margin: "4px 0 0", fontFamily: "Montserrat, sans-serif" }}>
+            Pedidos listos para entregar al cliente, agrupados por día. Marca como entregado cuando el vendedor lo despache.
+          </p>
+        </div>
+        <FiltroListo isAdmin={isAdmin} currentUserName={currentUserName} busqueda={busqueda} setBusqueda={setBusqueda} total={orders.length} mostrados={visibles.length} />
       </div>
-      {orders.length === 0
-        ? <div style={S.emptyCard}>No hay pedidos pendientes de entrega</div>
+      {visibles.length === 0
+        ? <div style={S.emptyCard}>{busqueda ? "Sin resultados para esa búsqueda" : (isAdmin ? "No hay pedidos pendientes de entrega" : "No tienes pedidos pendientes de entrega")}</div>
         : groupKeys.map(day => (
           <div key={day} style={{ marginBottom: 24 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
@@ -3622,11 +3914,60 @@ function ListoPendienteView({ orders, onEntregado, onDetail }) {
   );
 }
 
+// ─── BARRA DE FILTRO PARA PEDIDO LISTO / ENTREGADO ───────────────────────────
+function FiltroListo({ isAdmin, currentUserName, busqueda, setBusqueda, total, mostrados }) {
+  if (!isAdmin) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#F3F4F6", border: "1px solid #E5E7EB", borderRadius: 10, padding: "8px 14px" }}>
+        <span style={{ fontSize: 13, color: "#6B7280" }}>Mostrando solo tus pedidos</span>
+        <span style={{ background: "#111827", color: "#fff", fontSize: 12, fontWeight: 800, padding: "2px 10px", borderRadius: 10 }}>{mostrados}</span>
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+        <span style={{ position: "absolute", left: 14, fontSize: 15, opacity: 0.5, pointerEvents: "none" }}>🔍</span>
+        <input
+          value={busqueda}
+          onChange={e => setBusqueda(e.target.value)}
+          placeholder="Buscar por cliente, vendedor o N° nota de venta..."
+          style={{
+            width: 340, maxWidth: "100%", minWidth: 0, flex: "1 1 240px", boxSizing: "border-box",
+            padding: "11px 14px 11px 40px", borderRadius: 10,
+            border: "1px solid #E5E7EB", background: "#fff",
+            fontSize: 14, color: "#111827", outline: "none",
+            fontFamily: "Montserrat, sans-serif",
+          }}
+        />
+        {busqueda && (
+          <button onClick={() => setBusqueda("")} style={{ position: "absolute", right: 10, background: "#F3F4F6", border: "none", borderRadius: "50%", width: 22, height: 22, cursor: "pointer", color: "#6B7280", fontSize: 12 }}>✕</button>
+        )}
+      </div>
+      <span style={{ fontSize: 13, color: "#6B7280", fontWeight: 700 }}>
+        {busqueda ? `${mostrados} de ${total}` : `${total} pedido${total !== 1 ? "s" : ""}`}
+      </span>
+    </div>
+  );
+}
+// Filtra por propiedad (vendedor) o por búsqueda de texto
+function filtrarListo(orders, isAdmin, currentUserName, busqueda) {
+  const mismoVendedor = (o) => notifKey(o.vendedor) === notifKey(currentUserName);
+  if (!isAdmin) return orders.filter(mismoVendedor);
+  const q = (busqueda || "").trim().toLowerCase();
+  if (!q) return orders;
+  return orders.filter(o =>
+    (o.cliente || "").toLowerCase().includes(q) ||
+    (o.vendedor || "").toLowerCase().includes(q) ||
+    (o.notaVenta || "").toLowerCase().includes(q)
+  );
+}
+
 // ─── LISTO: ENTREGADO ─────────────────────────────────────────────────────────
-function ListoEntregadoView({ orders, onDetail, isAdmin, onDelete }) {
-  const [fv, setFv] = useState("Todos");
-  const vendedores = ["Todos", ...Array.from(new Set(orders.map(o => o.vendedor).filter(Boolean))).sort()];
-  const filtrados = fv === "Todos" ? orders : orders.filter(o => o.vendedor === fv);
+function ListoEntregadoView({ orders, onDetail, isAdmin, currentUserName, onDelete }) {
+  const isMobile = useIsMobile();
+  const [busqueda, setBusqueda] = useState("");
+  const filtrados = filtrarListo(orders, isAdmin, currentUserName, busqueda);
   return (
     <div>
       <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
@@ -3636,18 +3977,12 @@ function ListoEntregadoView({ orders, onDetail, isAdmin, onDelete }) {
             Registro completo de todos los pedidos entregados al cliente.
           </p>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", letterSpacing: "0.06em" }}>VENDEDOR</span>
-          <select value={fv} onChange={e => setFv(e.target.value)} style={{ ...S.select, minWidth: 190 }}>
-            {vendedores.map(v => <option key={v}>{v}</option>)}
-          </select>
-          <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 700 }}>{filtrados.length} pedido{filtrados.length !== 1 ? "s" : ""}</span>
-        </div>
+        <FiltroListo isAdmin={isAdmin} currentUserName={currentUserName} busqueda={busqueda} setBusqueda={setBusqueda} total={orders.length} mostrados={filtrados.length} />
       </div>
       {filtrados.length === 0
-        ? <div style={S.emptyCard}>{fv === "Todos" ? "No hay pedidos entregados aún" : `Sin pedidos entregados de ${fv}`}</div>
+        ? <div style={S.emptyCard}>{busqueda ? "Sin resultados para esa búsqueda" : (isAdmin ? "No hay pedidos entregados aún" : "No tienes pedidos entregados")}</div>
         : filtrados.map(o => (
-          <div key={o.id} style={{ ...S.orderCard, borderLeft: "3px solid #374151" }}>
+          <div key={o.id} style={{ ...S.orderCard, ...(isMobile ? { flexDirection: "column", alignItems: "stretch", gap: 10, padding: "14px" } : {}), borderLeft: `${isMobile ? 4 : 3}px solid #374151` }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
                 <span style={{ fontWeight: 800, fontSize: 15, color: "#111827", textTransform: "uppercase" }}>{o.cliente}</span>
@@ -3655,8 +3990,9 @@ function ListoEntregadoView({ orders, onDetail, isAdmin, onDelete }) {
                 <span style={{ ...S.chip, background: o.type === "four" ? "#EFF6FF" : (o.stage === "diseno" ? "#FEE2E2" : "#FEF3C7"), color: o.type === "four" ? "#3B82F6" : (o.stage === "diseno" ? "#DC2626" : "#D97706") }}>
                   {o.type === "four" ? (o.express ? "⚡ EXPRESS" : "FOUR") : (o.stage === "diseno" ? "DISEÑO" : "PRODUCCIÓN")}
                 </span>
+                {o.notaVenta && <span style={{ ...S.chip, background: "#111827", color: "#fff", fontWeight: 800 }}>NV #{o.notaVenta}</span>}
               </div>
-              <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexWrap: "wrap", marginBottom: 4 }}>
+              <div style={{ display: "flex", gap: 12, fontSize: 14, color: "#4B5563", flexWrap: "wrap", marginBottom: 4 }}>
                 <span style={{ fontWeight: 800, color: "#374151" }}>{o.vendedor}</span><span>·</span>
                 <span>{o.deporte}</span><span>·</span>
                 <span>{o.cantidad} prendas</span><span>·</span>
@@ -3679,8 +4015,8 @@ function ListoEntregadoView({ orders, onDetail, isAdmin, onDelete }) {
                 )}
               </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end", flexShrink: 0, marginLeft: 12 }}>
-              <div style={{ textAlign: "right" }}>
+            <div className={isMobile ? "fs-scroll-x" : ""} style={{ display: "flex", flexDirection: isMobile ? "row" : "column", gap: isMobile ? 8 : 6, alignItems: isMobile ? "center" : "flex-end", flexShrink: 0, marginLeft: isMobile ? 0 : 12, paddingTop: isMobile ? 10 : 0, borderTop: isMobile ? "1px solid #F3F4F6" : "none" }}>
+              <div style={{ textAlign: isMobile ? "left" : "right", flexShrink: 0 }}>
                 <div style={{ fontSize: 16, fontWeight: 900, color: "#111827" }}>{fmtCurrency(o.valor)}</div>
                 <div style={{ fontSize: 10, color: "#9CA3AF", letterSpacing: "0.06em", marginTop: 2 }}>VALOR PEDIDO</div>
               </div>
@@ -3699,6 +4035,7 @@ function ListoEntregadoView({ orders, onDetail, isAdmin, onDelete }) {
 
 // ─── USUARIOS VIEW ────────────────────────────────────────────────────────────
 function UsuariosView({ currentUser }) {
+  const isMobile = useIsMobile();
   const [users, setUsers]       = useState([]);
   const [loading, setLoading]   = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -3787,7 +4124,7 @@ function UsuariosView({ currentUser }) {
       {/* User table */}
       <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E5E7EB", overflow: "hidden" }}>
         {/* Header row */}
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr 120px", gap: 0, background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "10px 20px" }}>
+        <div style={{ display: isMobile ? "none" : "grid", gridTemplateColumns: "2fr 2fr 1fr 120px", gap: 0, background: "#F9FAFB", borderBottom: "1px solid #E5E7EB", padding: "10px 20px" }}>
           {["NOMBRE", "CORREO", "ROL", "ACCIONES"].map(h => (
             <span key={h} style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", letterSpacing: "0.1em" }}>{h}</span>
           ))}
@@ -3796,16 +4133,19 @@ function UsuariosView({ currentUser }) {
           <div style={{ padding: "32px", textAlign: "center", color: "#D1D5DB", fontSize: 13 }}>Sin usuarios registrados</div>
         )}
         {users.map((u, i) => (
-          <div key={u.email} style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr 120px", gap: 0, padding: "14px 20px", borderBottom: i < users.length - 1 ? "1px solid #F3F4F6" : "none", alignItems: "center" }}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 13, color: "#111827" }}>{u.name}</div>
-              {u.email === currentUser.email && <div style={{ fontSize: 10, color: "#9CA3AF", marginTop: 2 }}>← tú</div>}
+          <div key={u.email} style={{ display: isMobile ? "flex" : "grid", flexDirection: isMobile ? "column" : undefined, gridTemplateColumns: isMobile ? undefined : "2fr 2fr 1fr 120px", gap: isMobile ? 7 : 0, padding: isMobile ? "16px" : "14px 20px", borderBottom: i < users.length - 1 ? "1px solid #F3F4F6" : "none", alignItems: isMobile ? "flex-start" : "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ fontWeight: 800, fontSize: isMobile ? 16 : 13, color: "#111827" }}>{u.name}</div>
+              {isMobile && <span style={{ ...S.chip, ...roleBg(u.role), fontSize: 10 }}>{roleLabel(u.role)}</span>}
+              {u.email === currentUser.email && <div style={{ fontSize: 10, color: "#9CA3AF" }}>← tú</div>}
             </div>
-            <div style={{ fontSize: 13, color: "#6B7280" }}>{u.email}</div>
-            <div>
-              <span style={{ ...S.chip, ...roleBg(u.role), fontSize: 10 }}>{roleLabel(u.role)}</span>
-            </div>
-            <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ fontSize: isMobile ? 14 : 13, color: "#6B7280", wordBreak: "break-all" }}>{u.email}</div>
+            {!isMobile && (
+              <div>
+                <span style={{ ...S.chip, ...roleBg(u.role), fontSize: 10 }}>{roleLabel(u.role)}</span>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 6, marginTop: isMobile ? 4 : 0 }}>
               <button onClick={() => openEdit(u)} style={{ ...S.actionBtn, background: "#F3F4F6", color: "#374151" }}>✏ Editar</button>
               {u.email !== currentUser.email && (
                 <button onClick={() => handleDelete(u.email)} style={{ ...S.actionBtn, background: "#FEF2F2", color: "#DC2626" }}>✕</button>
@@ -3821,7 +4161,7 @@ function UsuariosView({ currentUser }) {
           <div style={{ ...S.confirmModal, maxWidth: 460 }}>
             <div style={{ ...S.confirmTitle, marginBottom: 20 }}>{editUser ? "Editar usuario" : "Crear nuevo usuario"}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
                 <div style={{ gridColumn: "1 / -1" }}>
                   <label style={S.label}>Nombre completo *</label>
                   <input style={{ ...S.input, marginTop: 5 }} value={form.name} placeholder="Ej: Angelica Gonzalez" onChange={e => setForm({ ...form, name: e.target.value })} />
@@ -3913,5 +4253,13 @@ const S = {
   btnGhost: { padding: "11px 20px", background: "transparent", color: "#6B7280", border: "1px solid #E5E7EB", borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 12, fontFamily: "Montserrat, sans-serif" },
   actionBtn: { padding: "7px 14px", border: "none", borderRadius: 7, cursor: "pointer", fontWeight: 700, fontSize: 11, letterSpacing: "0.04em", whiteSpace: "nowrap", fontFamily: "Montserrat, sans-serif" },
   select: { padding: "8px 14px", borderRadius: 8, border: "1px solid #E5E7EB", fontSize: 12, color: "#374151", background: "#fff", cursor: "pointer", fontWeight: 600, letterSpacing: "0.04em", fontFamily: "Montserrat, sans-serif" },
+  // ── Variantes móviles ──
+  overlayMobile: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 999, padding: 0 },
+  bigModalMobile: { background: "#fff", border: "none", borderRadius: "18px 18px 0 0", width: "100%", maxWidth: "100%", height: "95vh", maxHeight: "95vh", display: "flex", flexDirection: "column", boxShadow: "0 -8px 40px rgba(0,0,0,0.3)" },
+  bigModalHeaderMobile: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 18px", borderBottom: "1px solid #F3F4F6", flexShrink: 0, position: "sticky", top: 0, background: "#fff", borderRadius: "18px 18px 0 0" },
+  bigModalBodyMobile: { flex: 1, overflowY: "auto", padding: "18px 16px", WebkitOverflowScrolling: "touch" },
+  bigModalFooterMobile: { display: "flex", justifyContent: "stretch", gap: 10, padding: "14px 16px calc(14px + env(safe-area-inset-bottom))", borderTop: "1px solid #F3F4F6", flexShrink: 0 },
+  confirmModalMobile: { background: "#fff", border: "none", borderRadius: 16, padding: 22, maxWidth: 440, width: "100%", boxShadow: "0 12px 48px rgba(0,0,0,0.2)" },
+  formGridMobile: { display: "grid", gridTemplateColumns: "1fr", gap: 12, marginBottom: 14 },
   fab: { position: "fixed", bottom: 32, right: 32, width: 60, height: 60, borderRadius: "50%", background: "#111827", color: "#fff", border: "none", fontSize: 30, cursor: "pointer", boxShadow: "0 4px 24px rgba(0,0,0,0.28)", zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1, fontWeight: 300 },
 };
