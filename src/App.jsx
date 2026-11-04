@@ -522,11 +522,12 @@ const GLOBAL_CSS = `
   .t-cab{height:44px;background:#F7F8FA;border-bottom:1px solid #E4E7EC;
     font-size:12px;font-weight:700;color:#5B6270}
   .t-der{text-align:right} .t-cen{text-align:center}
-  .t-banda{display:flex;align-items:baseline;gap:10px;padding:13px 18px;background:#EDF0F4;
-    border-top:1px solid #E4E7EC;border-bottom:1px solid #E4E7EC}
-  .t-banda h3{font-size:14.5px;font-weight:800;margin:0;letter-spacing:-.01em;color:#141619}
-  .t-banda span{font-size:12.5px;color:#949BA8;font-weight:600}
-  .t-banda.urg{background:#FCF0E6} .t-banda.urg h3{color:#EC6A1E}
+  .t-banda{display:flex;align-items:baseline;gap:10px;padding:13px 18px;background:#1B2B45;
+    border-top:1px solid #16233A;border-bottom:1px solid #16233A}
+  .t-banda h3{font-size:14.5px;font-weight:800;margin:0;letter-spacing:-.01em;color:#FFFFFF}
+  .t-banda span{font-size:12.5px;color:#93A3BC;font-weight:600}
+  .t-banda.urg{background:#1B2B45;box-shadow:inset 4px 0 0 #EC6A1E}
+  .t-banda.urg h3{color:#FFA053} .t-banda.urg span{color:#B59C86}
   .t-fila{min-height:66px;border-bottom:1px solid #F1F3F5;background:#fff;transition:background .12s}
   .t-fila:hover{background:#FBFCFD}
   .t-fila.abierta{background:#F7F9FC}
@@ -545,10 +546,12 @@ const GLOBAL_CSS = `
   .t-btn{border:1px solid #E4E7EC;background:#fff;border-radius:9px;cursor:pointer;padding:0;
     width:30px;height:30px;display:grid;place-items:center;color:#949BA8;flex:none}
   .t-btn:hover{border-color:#141619;color:#141619}
-  .t-tick{border:1.5px solid #E4E7EC;background:#fff;border-radius:9px;width:30px;height:30px;
-    display:grid;place-items:center;cursor:pointer;color:#C6CBD3;justify-self:center;padding:0}
-  .t-tick:hover{border-color:#13794F;color:#13794F}
+  .t-tick{border:1.5px solid #E4B4AB;background:#FDECEA;border-radius:9px;width:30px;height:30px;
+    display:grid;place-items:center;cursor:pointer;color:#C2410C;justify-self:center;padding:0;
+    transition:background .12s,border-color .12s,color .12s}
+  .t-tick:hover{border-color:#C2410C}
   .t-tick.si{background:#13794F;border-color:#13794F;color:#fff}
+  .t-tick.si:hover{border-color:#0E5C3C}
   .t-acc{display:flex;align-items:center;gap:7px;justify-content:flex-end}
   .t-ver{border:1px solid #E4E7EC;background:#fff;border-radius:9px;padding:7px 12px;
     font-family:Montserrat,sans-serif;font-size:12.5px;font-weight:700;color:#141619;cursor:pointer;white-space:nowrap}
@@ -734,8 +737,8 @@ function Section({ title, count, accent, children, defaultOpen = true }) {
 
 // ─── ORDER CARD ───────────────────────────────────────────────────────────────
 function ImpresoBadge({ order }) {
-  const { userName, onToggleImpreso } = useContext(AppContext);
-  const esCristian = (userName || "").trim().toLowerCase() === "cristian";
+  const { userName, esAdmin, onToggleImpreso } = useContext(AppContext);
+  const esCristian = esAdmin || (userName || "").trim().toLowerCase() === "cristian";
   if (!esCristian) return null; // solo visible en el perfil de Cristian
   const impreso = !!order.impreso;
   const label = impreso ? "✅ Impreso" : "❌ Sin imprimir";
@@ -820,9 +823,9 @@ function CabeceraTabla({ colAccion = "Acciones", colFecha = "Ingreso", colPlazo 
 
 // Fila + panel desplegable. `acciones` son los botones del panel.
 function FilaPedido({ order, onDetail, acciones, mostrarPlazo = true, fechaEtiqueta }) {
-  const { userName, onToggleImpreso } = useContext(AppContext);
+  const { userName, esAdmin, onToggleImpreso } = useContext(AppContext);
   const [abierta, setAbierta] = useState(false);
-  const esCristian = (userName || "").trim().toLowerCase() === "cristian";
+  const esCristian = esAdmin || (userName || "").trim().toLowerCase() === "cristian";
   const dl = fechaEntregaEfectiva(order);
   const exclusiva = order.exclusivaEstado === "aprobada";
 
@@ -889,7 +892,9 @@ function FilaPedido({ order, onDetail, acciones, mostrarPlazo = true, fechaEtiqu
           <button className={`t-tick ${order.impreso ? "si" : ""}`} aria-pressed={!!order.impreso}
             title={order.impreso ? "Impreso" : "Sin imprimir"}
             onClick={e => { e.stopPropagation(); onToggleImpreso(order.id, !order.impreso); }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m5 13 4.5 4.5L19 7"/></svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+              {order.impreso ? <path d="m5 13 4.5 4.5L19 7"/> : <path d="M6 6l12 12M18 6L6 18"/>}
+            </svg>
           </button>
         ) : <div />}
         <div className="t-acc">
@@ -2647,7 +2652,7 @@ export default function App() {
   const isListoActive = listoViews.includes(view);
 
   return (
-    <AppContext.Provider value={{ userName: user.name, onToggleImpreso: toggleImpreso }}>
+    <AppContext.Provider value={{ userName: user.name, esAdmin: isAdmin, onToggleImpreso: toggleImpreso }}>
     <div style={S.app}>
       <GlobalStyles />
       <header style={S.header}>
@@ -3997,8 +4002,8 @@ function Dashboard({ data, allPending }) {
 // ─── ATRASADOS VIEW ───────────────────────────────────────────────────────────
 // ─── BARRA DE FILTROS ─────────────────────────────────────────────────────────
 function BarraFiltros({ busca, setBusca, vendedor, setVendedor, vendedores, sinImprimir, setSinImprimir, resultados, total }) {
-  const { userName } = useContext(AppContext);
-  const esCristian = (userName || "").trim().toLowerCase() === "cristian";
+  const { userName, esAdmin } = useContext(AppContext);
+  const esCristian = esAdmin || (userName || "").trim().toLowerCase() === "cristian";
   return (
     <div style={{ display: "flex", gap: 9, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
       <div style={{ position: "relative", flex: "1 1 280px", minWidth: 0, display: "flex", alignItems: "center" }}>
