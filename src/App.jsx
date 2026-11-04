@@ -43,6 +43,17 @@ const STORAGE_KEY = "foursport_v6";
 const USERS_KEY   = "foursport_users_v1";
 
 // ─── AUTH HELPERS ─────────────────────────────────────────────────────────────
+// Los archivos ya no son públicos: se piden enlaces firmados que caducan en 1 hora.
+async function urlArchivo(f) {
+  if (f?.path) {
+    try {
+      const { data } = await supabase.storage.from("archivos").createSignedUrl(f.path, 3600);
+      if (data?.signedUrl) return data.signedUrl;
+    } catch (e) { console.warn("No se pudo firmar el archivo:", e); }
+  }
+  return f?.url || null; // compatibilidad con archivos antiguos
+}
+
 async function loadUsersFromSupabase() {
   try {
     const { data, error } = await supabase.from("usuarios").select("*");
@@ -54,6 +65,25 @@ async function loadUsersFromSupabase() {
     return [];
   }
 }
+// Gestión de usuarios: se hace en el servidor (función admin-usuarios),
+// porque crear cuentas requiere privilegios que no deben estar en el navegador.
+async function gestionarUsuario(accion, datos) {
+  try {
+    const { data, error } = await supabase.functions.invoke("admin-usuarios", {
+      body: { accion, ...datos },
+    });
+    if (error) {
+      let msg = "No se pudo completar la operación.";
+      try { const d = await error.context?.json?.(); if (d?.error) msg = d.error; } catch {}
+      return { ok: false, error: msg };
+    }
+    if (data?.error) return { ok: false, error: data.error };
+    return { ok: true, data };
+  } catch (e) {
+    return { ok: false, error: "No se pudo conectar con el servidor." };
+  }
+}
+
 async function saveUserToSupabase(user) {
   try {
     const { error } = await supabase.from("usuarios").upsert({
@@ -581,7 +611,7 @@ function FileUploadBlock({ files, onChange, label = "📎 Listado de números y 
               <span>{f.type?.includes("image") ? "🖼" : "📄"}</span>
               <span style={{ flex: 1, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#374151" }}>{f.name}</span>
               <span style={{ fontSize: 11, color: "#9CA3AF" }}>{fmt(f.size)}</span>
-              {f.url && <a href={f.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: 11, color: "#3B82F6", textDecoration: "none", padding: "2px 8px", border: "1px solid #BFDBFE", borderRadius: 4, background: "#EFF6FF" }}>↓</a>}
+              {(f.url || f.path) && <button onClick={async e => { e.stopPropagation(); const u = await urlArchivo(f); if (u) window.open(u, "_blank"); }} style={{ fontSize: 11, color: "#3B82F6", padding: "2px 8px", border: "1px solid #BFDBFE", borderRadius: 4, background: "#EFF6FF", cursor: "pointer" }}>↓</button>}
               <button onClick={() => remove(f)} style={{ background: "none", border: "none", color: "#D1D5DB", cursor: "pointer", fontSize: 14 }}>✕</button>
             </div>
           ))}
@@ -1119,9 +1149,10 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
   const [previewImg, setPreviewImg] = useState(null);
 
   const descargarArchivo = async (f) => {
-    if (!f.url) return;
+    const enlace = await urlArchivo(f);
+    if (!enlace) return;
     try {
-      const resp = await fetch(f.url);
+      const resp = await fetch(enlace);
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1133,7 +1164,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
       // Si falla el fetch (CORS u otro), abrir en pestaña como respaldo
-      window.open(f.url, "_blank");
+      window.open(enlace, "_blank");
     }
   };
 
@@ -1164,7 +1195,7 @@ function OrderDetailModal({ order: initialOrder, onClose, currentUser, onSaveFil
               {f.url ? (
                 <>
                   {f.type?.includes("image") && (
-                    <button onClick={() => setPreviewImg(f)} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: color, background: "#fff", border: `1px solid ${color}`, cursor: "pointer", padding: "6px 12px", borderRadius: 6, whiteSpace: "nowrap" }}>👁 Vista previa</button>
+                    <button onClick={async () => { const u = await urlArchivo(f); setPreviewImg({ ...f, url: u }); }} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: color, background: "#fff", border: `1px solid ${color}`, cursor: "pointer", padding: "6px 12px", borderRadius: 6, whiteSpace: "nowrap" }}>👁 Vista previa</button>
                   )}
                   <button onClick={() => descargarArchivo(f)} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "#fff", background: color, border: "none", cursor: "pointer", padding: "6px 14px", borderRadius: 6, whiteSpace: "nowrap" }}>↓ Descargar</button>
                 </>
@@ -1776,6 +1807,20 @@ function NewOrderModal({ onClose, onAddFour, onAddSub, onEditRevision, isAdmin, 
 }
 
 // ─── LOGIN SCREEN ─────────────────────────────────────────────────────────────
+// Construye el objeto de usuario de la app a partir de la sesión de Supabase Auth
+function usuarioDesdeSesion(authUser) {
+  if (!authUser) return null;
+  const meta = authUser.user_metadata || {};
+  const app  = authUser.app_metadata || {};
+  return {
+    id: authUser.id,
+    email: authUser.email,
+    name: meta.name || (authUser.email || "").split("@")[0],
+    role: app.role || meta.role || "vendedor",
+    debeCambiarClave: meta.debe_cambiar_clave === true,
+  };
+}
+
 function LoginScreen({ onLogin }) {
   const [email, setEmail]     = useState("");
   const [password, setPass]   = useState("");
@@ -1785,25 +1830,21 @@ function LoginScreen({ onLogin }) {
   const submit = async () => {
     setError(""); setLoading(true);
     try {
-      const { data: rows, error: err } = await supabase
-        .from("usuarios")
-        .select("*")
-        .eq("email", email.toLowerCase().trim())
-        .eq("password", password)
-        .limit(1);
-      if (err) throw err;
-      if (rows && rows.length > 0) {
-        const u = rows[0];
-        onLogin({ email: u.email, name: u.name, role: u.role, password: u.password });
+      const { data, error: err } = await supabase.auth.signInWithPassword({
+        email: email.toLowerCase().trim(),
+        password,
+      });
+      if (err) {
+        setError(err.message && /invalid/i.test(err.message)
+          ? "Correo o contraseña incorrectos."
+          : "No se pudo iniciar sesión. Revisa tu conexión.");
+      } else if (data?.user) {
+        onLogin(usuarioDesdeSesion(data.user));
       } else {
         setError("Correo o contraseña incorrectos.");
       }
     } catch (e) {
-      // Fallback to localStorage users
-      const users = loadUsers();
-      const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
-      if (user) { onLogin(user); }
-      else { setError("Correo o contraseña incorrectos."); }
+      setError("No se pudo conectar. Revisa tu conexión a internet.");
     }
     setLoading(false);
   };
@@ -1894,12 +1935,19 @@ export default function App() {
   const listoRef                      = useRef(null);
   const notifsRef                     = useRef(null);
   const origFaviconRef                = useRef(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem("fs_user");
-      if (saved) setUser(JSON.parse(saved));
-    } catch {}
+    // Restaurar la sesión activa (Supabase la guarda y la renueva sola)
+    supabase.auth.getSession().then(({ data }) => {
+      if (data?.session?.user) setUser(usuarioDesdeSesion(data.session.user));
+      setAuthChecked(true);
+    }).catch(() => setAuthChecked(true));
+
+    // Reaccionar a cambios de sesión (cierre, expiración, otra pestaña)
+    const { data: sub } = supabase.auth.onAuthStateChange((evt, session) => {
+      setUser(session?.user ? usuarioDesdeSesion(session.user) : null);
+    });
 
     // Load from Supabase
     loadDataFromSupabase().then(async d => {
@@ -1920,7 +1968,7 @@ export default function App() {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { supabase.removeChannel(channel); sub?.subscription?.unsubscribe(); };
   }, []);
 
   useEffect(() => {
@@ -1991,13 +2039,10 @@ export default function App() {
   }, [user?.name]);
 
 
-  const handleLogin = (u) => {
-    setUser(u);
-    try { sessionStorage.setItem("fs_user", JSON.stringify(u)); } catch {}
-  };
-  const handleLogout = () => {
+  const handleLogin = (u) => setUser(u);
+  const handleLogout = async () => {
+    try { await supabase.auth.signOut(); } catch {}
     setUser(null);
-    try { sessionStorage.removeItem("fs_user"); } catch {}
   };
 
   const handleSendMessage = async () => {
@@ -2281,7 +2326,9 @@ export default function App() {
     }, [patched]);
   };
 
+  if (!authChecked) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#111827", color: "#39FF14", fontFamily: "Montserrat, sans-serif", fontSize: 12, fontWeight: 800, letterSpacing: "0.1em" }}>CARGANDO…</div>;
   if (!user) return <LoginScreen onLogin={handleLogin} />;
+  if (user.debeCambiarClave) return <PrimerIngresoModal user={user} onListo={() => setUser({ ...user, debeCambiarClave: false })} />;
   if (loading) return <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", fontFamily: "Montserrat, sans-serif", gap: 16 }}><div style={{ width: 40, height: 40, border: "3px solid #E5E7EB", borderTop: "3px solid #111827", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /><div style={{ color: "#9CA3AF", letterSpacing: "0.1em", fontSize: 12, fontWeight: 700 }}>CONECTANDO CON LA NUBE…</div><style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style></div>;
 
   const allPending = [...data.four, ...data.sub];
@@ -2762,7 +2809,7 @@ export default function App() {
         <ChangePasswordModal
           user={user}
           onClose={() => setShowPassModal(false)}
-          onChanged={newPass => { setUser({ ...user, password: newPass }); try { sessionStorage.setItem("fs_user", JSON.stringify({ ...user, password: newPass })); } catch {} }}
+          onChanged={() => { /* la sesión la gestiona Supabase Auth */ }}
         />
       )}
 
@@ -2968,6 +3015,81 @@ function FotoProductoModal({ order, onClose, onSaved, userName }) {
   );
 }
 
+// ─── CAMBIO DE CLAVE OBLIGATORIO (primer ingreso) ────────────────────────────
+function PrimerIngresoModal({ user, onListo }) {
+  const [nueva, setNueva] = useState("");
+  const [confirmar, setConfirmar] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const isMobile = useIsMobile();
+
+  const submit = async () => {
+    setError("");
+    if (nueva.length < 6) { setError("La clave debe tener al menos 6 caracteres."); return; }
+    if (nueva !== confirmar) { setError("Las dos claves no coinciden."); return; }
+    setSaving(true);
+    try {
+      const { error: err } = await supabase.auth.updateUser({
+        password: nueva,
+        data: { name: user.name, role: user.role, debe_cambiar_clave: false },
+      });
+      if (err) {
+        setError(/same/i.test(err.message || "")
+          ? "La clave nueva debe ser distinta a la actual."
+          : "No se pudo guardar. Intenta de nuevo.");
+        setSaving(false);
+        return;
+      }
+      onListo();
+    } catch (e) {
+      setError("No se pudo conectar. Revisa tu internet.");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#111827", zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? 18 : 24, fontFamily: "Montserrat, sans-serif", overflowY: "auto" }}>
+      <div style={{ width: "100%", maxWidth: 440, background: "#fff", borderRadius: 18, padding: isMobile ? 24 : 32 }}>
+        <div style={{ fontSize: 38, textAlign: "center", marginBottom: 10 }}>🔐</div>
+        <div style={{ fontSize: 21, fontWeight: 900, color: "#111827", textAlign: "center", fontFamily: "NikeFutura, Montserrat, sans-serif" }}>
+          Crea tu clave personal
+        </div>
+        <div style={{ fontSize: 14, color: "#6B7280", lineHeight: 1.6, textAlign: "center", marginTop: 10, marginBottom: 22 }}>
+          Hola <b style={{ color: "#111827" }}>{user.name}</b>. Por seguridad, la clave temporal que te entregaron debe reemplazarse por una tuya, que nadie más conoce.
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+          <div>
+            <label style={S.label}>Nueva clave</label>
+            <input type="password" autoFocus style={{ ...S.input, marginTop: 5 }} value={nueva}
+              onChange={e => setNueva(e.target.value)} placeholder="Mínimo 6 caracteres" />
+          </div>
+          <div>
+            <label style={S.label}>Repite la nueva clave</label>
+            <input type="password" style={{ ...S.input, marginTop: 5 }} value={confirmar}
+              onChange={e => setConfirmar(e.target.value)} placeholder="Escríbela otra vez"
+              onKeyDown={e => e.key === "Enter" && submit()} />
+          </div>
+        </div>
+
+        {error && <div style={{ color: "#DC2626", fontSize: 13, fontWeight: 600, marginTop: 12 }}>{error}</div>}
+
+        <button onClick={submit} disabled={saving}
+          style={{ width: "100%", marginTop: 20, padding: "15px", borderRadius: 10, border: "none",
+                   background: saving ? "#E5E7EB" : "#111827", color: saving ? "#9CA3AF" : "#39FF14",
+                   fontWeight: 900, fontSize: 14, letterSpacing: "0.06em", cursor: saving ? "default" : "pointer",
+                   fontFamily: "Montserrat, sans-serif" }}>
+          {saving ? "GUARDANDO…" : "GUARDAR Y ENTRAR →"}
+        </button>
+
+        <div style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", marginTop: 14, lineHeight: 1.5 }}>
+          Anótala donde solo tú la veas. Podrás cambiarla cuando quieras desde ⚙ Clave.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── CAMBIAR CLAVE MODAL ──────────────────────────────────────────────────────
 function ChangePasswordModal({ user, onClose, onChanged }) {
   const [actual, setActual] = useState("");
@@ -2979,12 +3101,15 @@ function ChangePasswordModal({ user, onClose, onChanged }) {
 
   const submit = async () => {
     setError("");
-    if (actual !== user.password) { setError("La clave actual no es correcta."); return; }
-    if (nueva.length < 4) { setError("La nueva clave debe tener al menos 4 caracteres."); return; }
+    if (!actual) { setError("Escribe tu clave actual."); return; }
+    if (nueva.length < 6) { setError("La nueva clave debe tener al menos 6 caracteres."); return; }
     if (nueva !== confirmar) { setError("Las claves nuevas no coinciden."); return; }
     setSaving(true);
     try {
-      const { error: err } = await supabase.from("usuarios").update({ password: nueva }).eq("email", user.email);
+      // Verificar la clave actual reautenticando, luego cambiarla en Auth
+      const { error: errLogin } = await supabase.auth.signInWithPassword({ email: user.email, password: actual });
+      if (errLogin) { setError("La clave actual no es correcta."); setSaving(false); return; }
+      const { error: err } = await supabase.auth.updateUser({ password: nueva });
       if (err) throw err;
       setOk(true);
       onChanged(nueva);
@@ -4058,14 +4183,20 @@ function UsuariosView({ currentUser }) {
     setFormError(""); setEditUser(null); setShowForm(true);
   };
   const openEdit = (u) => {
-    setForm({ name: u.name, email: u.email, password: u.password, role: u.role });
+    setForm({ name: u.name, email: u.email, password: "", role: u.role });
     setFormError(""); setEditUser(u); setShowForm(true);
   };
 
   const handleSave = async () => {
     setFormError("");
-    if (!form.name.trim() || !form.email.trim() || !form.password.trim()) {
-      setFormError("Todos los campos son obligatorios."); return;
+    if (!form.name.trim() || !form.email.trim()) {
+      setFormError("El nombre y el correo son obligatorios."); return;
+    }
+    if (!editUser && form.password.trim().length < 6) {
+      setFormError("La clave debe tener al menos 6 caracteres."); return;
+    }
+    if (editUser && form.password && form.password.length < 6) {
+      setFormError("La clave nueva debe tener al menos 6 caracteres."); return;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(form.email)) { setFormError("Correo inválido."); return; }
@@ -4080,13 +4211,17 @@ function UsuariosView({ currentUser }) {
       updated = [...users, { ...form, email: form.email.toLowerCase() }];
     }
 
-    // Save to Supabase
-    const userToSave = editUser ? { ...editUser, ...form } : { ...form, email: form.email.toLowerCase() };
-    const ok = await saveUserToSupabase(userToSave);
-    if (!ok) { setFormError("Error al guardar. Verifica la conexión."); return; }
+    // Crear o actualizar la cuenta en el servidor
+    const res = await gestionarUsuario(editUser ? "actualizar" : "crear", {
+      email: (editUser ? editUser.email : form.email).toLowerCase().trim(),
+      nombre: form.name.trim(),
+      rol: form.role,
+      clave: form.password || "",
+    });
+    if (!res.ok) { setFormError(res.error); return; }
 
-    saveUsers(updated); // local cache
-    setUsers(updated);
+    const frescos = await loadUsersFromSupabase();
+    setUsers(frescos.length ? frescos : updated);
     setShowForm(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -4094,10 +4229,10 @@ function UsuariosView({ currentUser }) {
 
   const handleDelete = async (email) => {
     if (email === currentUser.email) return;
-    await deleteUserFromSupabase(email);
-    const updated = users.filter(u => u.email !== email);
-    saveUsers(updated);
-    setUsers(updated);
+    const res = await gestionarUsuario("eliminar", { email });
+    if (!res.ok) { setFormError(res.error); return; }
+    const frescos = await loadUsersFromSupabase();
+    setUsers(frescos.length ? frescos : users.filter(u => u.email !== email));
   };
 
   const roleLabel = r => r === "admin" ? "Admin" : "Vendedor";
