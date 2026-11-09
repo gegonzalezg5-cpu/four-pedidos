@@ -518,7 +518,7 @@ const GLOBAL_CSS = `
   /* ── TABLA DE PEDIDOS ───────────────────────────────────────────────── */
   .t-hoja{background:#fff;border:1px solid #E4E7EC;border-radius:14px;overflow:hidden;margin-bottom:18px}
   .t-cab,.t-fila{display:grid;gap:14px;align-items:center;padding:0 18px;
-    grid-template-columns:104px minmax(170px,1.3fr) 150px 92px 66px 114px 98px 70px 126px}
+    grid-template-columns:100px minmax(150px,1.2fr) 142px 86px 60px 110px 92px 62px 182px}
   .t-cab{height:44px;background:#F7F8FA;border-bottom:1px solid #E4E7EC;
     font-size:12px;font-weight:700;color:#5B6270}
   .t-der{text-align:right} .t-cen{text-align:center}
@@ -553,6 +553,10 @@ const GLOBAL_CSS = `
   .t-tick.si{background:#13794F;border-color:#13794F;color:#fff}
   .t-tick.si:hover{border-color:#0E5C3C}
   .t-acc{display:flex;align-items:center;gap:7px;justify-content:flex-end}
+  .t-listo{border:1.5px solid #13794F;background:#13794F;color:#fff;border-radius:9px;height:30px;
+    padding:0 11px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;
+    display:inline-flex;align-items:center;gap:5px;white-space:nowrap;transition:background .12s}
+  .t-listo:hover{background:#0E5C3C;border-color:#0E5C3C}
   .t-ver{border:1px solid #E4E7EC;background:#fff;border-radius:9px;padding:7px 12px;
     font-family:Montserrat,sans-serif;font-size:12.5px;font-weight:700;color:#141619;cursor:pointer;white-space:nowrap}
   .t-ver:hover{border-color:#141619;background:#FAFBFC}
@@ -822,7 +826,7 @@ function CabeceraTabla({ colAccion = "Acciones", colFecha = "Ingreso", colPlazo 
 }
 
 // Fila + panel desplegable. `acciones` son los botones del panel.
-function FilaPedido({ order, onDetail, acciones, mostrarPlazo = true, fechaEtiqueta }) {
+function FilaPedido({ order, onDetail, acciones, accionRapida, mostrarPlazo = true, fechaEtiqueta }) {
   const { userName, esAdmin, onToggleImpreso } = useContext(AppContext);
   const [abierta, setAbierta] = useState(false);
   const esCristian = esAdmin || (userName || "").trim().toLowerCase() === "cristian";
@@ -898,6 +902,13 @@ function FilaPedido({ order, onDetail, acciones, mostrarPlazo = true, fechaEtiqu
           </button>
         ) : <div />}
         <div className="t-acc">
+          {accionRapida && (
+            <button className="t-listo" title="Marcar este pedido como listo"
+              onClick={e => { e.stopPropagation(); accionRapida(); }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round"><path d="m5 13 4.5 4.5L19 7"/></svg>
+              Listo
+            </button>
+          )}
           {onDetail && <button className="t-ver" onClick={e => { e.stopPropagation(); onDetail(); }}>Detalle</button>}
           <button className="t-btn t-tog" title={`Ver notas y ${nArchivos} archivo${nArchivos === 1 ? "" : "s"}`} aria-expanded={abierta}
             style={{ position: "relative" }}
@@ -4060,7 +4071,7 @@ function useFiltros(orders) {
                     resultados: visibles.length, total: orders.length } };
 }
 
-function TablaPedidos({ orders, agrupar = true, onDetail, acciones, vacio = "No hay pedidos", fechaEtiqueta, mostrarPlazo = true, colFecha, colPlazo }) {
+function TablaPedidos({ orders, agrupar = true, onDetail, acciones, accionRapida, vacio = "No hay pedidos", fechaEtiqueta, mostrarPlazo = true, colFecha, colPlazo }) {
   const cab = <CabeceraTabla colFecha={colFecha} colPlazo={mostrarPlazo ? colPlazo : (colPlazo || "Estado")} />;
   if (!orders.length) return <div className="t-hoja">{cab}<div className="t-vacio">{vacio}</div></div>;
   const grupos = agrupar ? agruparPorEntrega(orders) : [{ titulo: null, items: orders }];
@@ -4078,6 +4089,7 @@ function TablaPedidos({ orders, agrupar = true, onDetail, acciones, vacio = "No 
           {g.items.map(o => (
             <FilaPedido key={o.id} order={o} onDetail={onDetail ? () => onDetail(o) : null}
               fechaEtiqueta={fechaEtiqueta} mostrarPlazo={mostrarPlazo}
+              accionRapida={accionRapida ? accionRapida(o) : null}
               acciones={acciones ? acciones(o) : null} />
           ))}
         </div>
@@ -4102,11 +4114,13 @@ function AtrasadosView({ orders, isAdmin, onDeliver, onApprove, onRevision, onDe
     </>
   );
 
+  const rapida = o => (isAdmin && onDeliver) ? (() => onDeliver(o.id, o.type)) : null;
+
   return (
     <div>
       <EncabezadoVista titulo="Pedidos atrasados" bajada="Pasaron su fecha máxima de entrega. El más atrasado arriba." orders={atrasados} extra="atrasado" />
       <BarraFiltros {...f.props} />
-      <TablaPedidos orders={atrasados} agrupar={false} onDetail={onDetail} acciones={acciones} vacio="✓ Sin pedidos atrasados" />
+      <TablaPedidos orders={atrasados} agrupar={false} onDetail={onDetail} acciones={acciones} accionRapida={rapida} vacio="✓ Sin pedidos atrasados" />
     </div>
   );
 }
@@ -4126,15 +4140,16 @@ function TodosView({ orders, isAdmin, onDeliver, onApprove, onRevision, onDetail
     </>
   );
 
+  const rapida = o => (isAdmin && onDeliver) ? (() => onDeliver(o.id, o.type)) : null;
   return (
     <div>
       <EncabezadoVista titulo="Todos los pedidos" bajada="Ordenados por día de entrega. Los más próximos arriba." orders={f.visibles} />
       <BarraFiltros {...f.props} />
       <SeccionTabla titulo="Pedidos Four" cantidad={four.length} color="#2B5CE6">
-        <TablaPedidos orders={four} onDetail={onDetail} acciones={accionesDe} vacio="Sin pedidos Four activos" />
+        <TablaPedidos orders={four} onDetail={onDetail} acciones={accionesDe} accionRapida={rapida} vacio="Sin pedidos Four activos" />
       </SeccionTabla>
       <SeccionTabla titulo="Sublimados" cantidad={sub.length} color="#6D3BD4">
-        <TablaPedidos orders={sub} onDetail={onDetail} acciones={accionesDe} vacio="Sin sublimados activos" />
+        <TablaPedidos orders={sub} onDetail={onDetail} acciones={accionesDe} accionRapida={rapida} vacio="Sin sublimados activos" />
       </SeccionTabla>
     </div>
   );
@@ -4183,11 +4198,12 @@ function FourView({ orders, isAdmin, onDeliver, onRevision, onDetail, onDelete, 
       {isAdmin && onDelete && <BotonPanel tono="rojo" onClick={() => onDelete(o.id)}>Eliminar</BotonPanel>}
     </>
   );
+  const rapida = o => isAdmin ? (() => onDeliver(o.id)) : null;
   return (
     <div>
       <EncabezadoVista titulo="Pedidos Four" bajada="Ordenados por día de entrega. Express y excepciones suben dentro del día." orders={lista} />
       <BarraFiltros {...f.props} />
-      <TablaPedidos orders={lista} onDetail={onDetail} acciones={acciones} vacio="No hay pedidos Four activos" />
+      <TablaPedidos orders={lista} onDetail={onDetail} acciones={acciones} accionRapida={rapida} vacio="No hay pedidos Four activos" />
     </div>
   );
 }
@@ -4205,15 +4221,16 @@ function SubView({ orders, isAdmin, onApprove, onDeliver, onRevision, onDetail, 
       {isAdmin && onDelete && <BotonPanel tono="rojo" onClick={() => onDelete(o.id)}>Eliminar</BotonPanel>}
     </>
   );
+  const rapida = o => (isAdmin && o.stage === "produccion") ? (() => onDeliver(o.id)) : null;
   return (
     <div>
       <EncabezadoVista titulo="Sublimados" bajada="En diseño esperan la maqueta del cliente. En producción corren 20 días hábiles." orders={f.visibles} />
       <BarraFiltros {...f.props} />
       <SeccionTabla titulo="En diseño" cantidad={enD.length} color="#DC2626">
-        <TablaPedidos orders={enD} onDetail={onDetail} acciones={acciones} vacio="Sin sublimados en diseño" />
+        <TablaPedidos orders={enD} onDetail={onDetail} acciones={acciones} accionRapida={rapida} vacio="Sin sublimados en diseño" />
       </SeccionTabla>
       <SeccionTabla titulo="En producción" cantidad={enP.length} color="#B5760B">
-        <TablaPedidos orders={enP} onDetail={onDetail} acciones={acciones} vacio="Sin sublimados en producción" />
+        <TablaPedidos orders={enP} onDetail={onDetail} acciones={acciones} accionRapida={rapida} vacio="Sin sublimados en producción" />
       </SeccionTabla>
     </div>
   );
